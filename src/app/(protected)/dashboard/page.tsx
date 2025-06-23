@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 export default async function DashboardPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const {
     data: { user },
@@ -11,6 +11,14 @@ export default async function DashboardPage() {
 
   if (!user) {
     redirect('/login')
+  }
+
+  const signOut = async () => {
+    'use server'
+
+    const supabase = await createClient()
+    await supabase.auth.signOut()
+    return redirect('/login')
   }
 
   return (
@@ -21,10 +29,8 @@ export default async function DashboardPage() {
           Welcome! You are logged in as{' '}
           <span className="font-semibold">{user.email}</span>.
         </p>
-        <form action="/auth/signout" method="post">
-          <Button type="submit">
-            Sign Out
-          </Button>
+        <form action={signOut}>
+          <Button type="submit">Sign Out</Button>
         </form>
       </div>
     </div>
