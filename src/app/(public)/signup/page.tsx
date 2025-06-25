@@ -30,19 +30,25 @@ export default function SignupPage() {
       return
     }
     setPasswordError(null)
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/email-confirmed`,
-      },
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${location.origin}/auth/email-confirmed`,
+        },
+      })
 
-    if (error) {
-      console.error('Error signing up:', error)
-      // You can add user-facing error handling here
-    } else {
-      setIsSignedUp(true)
+      if (error) {
+        console.error('Error signing up:', error)
+        return
+      }
+
+      if (data.user) {
+        setIsSignedUp(true)
+      }
+    } catch (error) {
+      console.error('Unexpected error during signup:', error)
     }
   }
   

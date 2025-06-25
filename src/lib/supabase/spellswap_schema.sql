@@ -1,0 +1,364 @@
+-- CardSwap Database Schema for Supabase
+
+-- Enable necessary extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Users table (extends Supabase auth.users)
+CREATE TABLE profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  display_name VARCHAR(100),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  location_name VARCHAR(255), -- City, State format
+  location_coordinates GEOGRAPHY(POINT, 4326), -- PostGIS for location-based queries
+  bio TEXT,
+  avatar_url TEXT,
+  phone VARCHAR(20),
+  preferred_contact_method VARCHAR(20) DEFAULT 'message', -- 'message', 'phone', 'email'
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User ratings/reviews aggregate
+CREATE TABLE user_ratings (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  total_reviews INTEGER DEFAULT 0,
+  recommend_count INTEGER DEFAULT 0,
+  neutral_count INTEGER DEFAULT 0,
+  not_recommend_count INTEGER DEFAULT 0,
+  average_rating DECIMAL(3,2) DEFAULT 0.00, -- calculated field
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+-- Master card database (imported from CSV)
+CREATE TABLE default_cards (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  arena_id INTEGER,
+  artist VARCHAR(255),
+  artist_ids TEXT[], -- array of artist IDs
+  booster BOOLEAN,
+  border_color VARCHAR(20),
+  card_back_id UUID,
+  cmc DECIMAL(10,2), -- converted mana cost (can be fractional)
+  collector_number VARCHAR(20),
+  color_identity TEXT[], -- array of colors
+  colors TEXT[], -- array of colors
+  digital BOOLEAN,
+  finishes TEXT[], -- array of finishes like 'nonfoil', 'foil'
+  foil BOOLEAN,
+  frame VARCHAR(10),
+  full_art BOOLEAN,
+  game_changer BOOLEAN,
+  games TEXT[], -- array of games like 'paper', 'mtgo', 'arena'
+  highres_image BOOLEAN,
+  scryfall_id UUID UNIQUE NOT NULL, -- using scryfall ID as unique identifier
+  illustration_id UUID,
+  image_status VARCHAR(50),
+  image_uris JSONB, -- store all image URIs as JSON
+  keywords TEXT[], -- array of keywords
+  lang VARCHAR(10) DEFAULT 'en',
+  layout VARCHAR(50),
+  legalities JSONB, -- store all format legalities as JSON
+  mana_cost VARCHAR(50),
+  mtgo_id INTEGER,
+  multiverse_ids INTEGER[], -- array of multiverse IDs
+  name VARCHAR(255) NOT NULL,
+  nonfoil BOOLEAN,
+  oracle_id UUID,
+  oracle_text TEXT,
+  oversized BOOLEAN,
+  prices JSONB, -- store all pricing info as JSON
+  prints_search_uri TEXT,
+  produced_mana TEXT[], -- array of mana colors produced
+  promo BOOLEAN,
+  purchase_uris JSONB, -- store purchase URIs as JSON
+  rarity VARCHAR(20), -- 'common', 'uncommon', 'rare', 'mythic'
+  related_uris JSONB, -- store related URIs as JSON
+  released_at DATE,
+  reprint BOOLEAN,
+  reserved BOOLEAN,
+  rulings_uri TEXT,
+  scryfall_set_uri TEXT,
+  scryfall_uri TEXT,
+  set_code VARCHAR(10) NOT NULL, -- using 'set' field from JSON
+  set_id UUID,
+  set_name VARCHAR(255) NOT NULL,
+  set_search_uri TEXT,
+  set_type VARCHAR(50),
+  set_uri TEXT,
+  story_spotlight BOOLEAN,
+  tcgplayer_id INTEGER,
+  textless BOOLEAN,
+  type_line VARCHAR(255),
+  uri TEXT,
+  variation BOOLEAN,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Card pricing history
+CREATE TABLE card_prices (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  card_id UUID REFERENCES default_cards(id) ON DELETE CASCADE,
+  price_date DATE NOT NULL,
+  market_price DECIMAL(10,2),
+  low_price DECIMAL(10,2),
+  mid_price DECIMAL(10,2),
+  high_price DECIMAL(10,2),
+  source VARCHAR(50) DEFAULT 'tcgplayer',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(card_id, price_date, source)
+);
+
+-- User containers (decks, binders, custom)
+CREATE TABLE containers (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  container_type VARCHAR(50) NOT NULL, -- 'deck', 'binder', 'custom'
+  description TEXT,
+  visibility VARCHAR(20) DEFAULT 'private', -- 'private', 'local', 'public'
+  is_default BOOLEAN DEFAULT false, -- for unorganized cards
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User card collection
+CREATE TABLE user_cards (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  card_id UUID REFERENCES default_cards(id) ON DELETE CASCADE,
+  container_id UUID REFERENCES containers(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  condition VARCHAR(20) DEFAULT 'near_mint', -- 'mint', 'near_mint', 'excellent', 'good', 'light_played', 'played', 'poor'
+  foil BOOLEAN DEFAULT false,
+  language VARCHAR(10) DEFAULT 'english',
+  notes TEXT,
+  is_for_sale BOOLEAN DEFAULT false,
+  sale_price DECIMAL(10,2),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User wishlist
+CREATE TABLE wishlist_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  card_id UUID REFERENCES default_cards(id) ON DELETE CASCADE,
+  priority VARCHAR(20) DEFAULT 'medium', -- 'high', 'medium', 'low'
+  max_price DECIMAL(10,2), -- maximum price user is willing to pay
+  preferred_condition VARCHAR(20) DEFAULT 'near_mint',
+  foil_preference VARCHAR(20) DEFAULT 'any', -- 'foil', 'non_foil', 'any'
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, card_id)
+);
+
+-- Transactions/trades
+CREATE TABLE transactions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  buyer_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  seller_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'accepted', 'completed', 'cancelled'
+  total_amount DECIMAL(10,2),
+  meeting_location VARCHAR(255),
+  meeting_time TIMESTAMP WITH TIME ZONE,
+  notes TEXT,
+  cancelled_by UUID REFERENCES profiles(id),
+  cancellation_reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Transaction items (cards being traded)
+CREATE TABLE transaction_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
+  user_card_id UUID REFERENCES user_cards(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  agreed_price DECIMAL(10,2) NOT NULL,
+  condition VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Transaction reviews
+CREATE TABLE transaction_reviews (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
+  reviewer_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  reviewed_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  rating VARCHAR(20) NOT NULL, -- 'recommend', 'neutral', 'not_recommend'
+  communication_rating INTEGER CHECK (communication_rating >= 1 AND communication_rating <= 5),
+  punctuality_rating INTEGER CHECK (punctuality_rating >= 1 AND punctuality_rating <= 5),
+  card_condition_rating INTEGER CHECK (card_condition_rating >= 1 AND card_condition_rating <= 5),
+  overall_experience_rating INTEGER CHECK (overall_experience_rating >= 1 AND overall_experience_rating <= 5),
+  comments TEXT,
+  would_trade_again BOOLEAN,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(transaction_id, reviewer_id)
+);
+
+-- Messages between users
+CREATE TABLE conversations (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
+  participant1_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  participant2_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  last_message_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(transaction_id)
+);
+
+CREATE TABLE messages (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Price alerts for wishlist items
+CREATE TABLE price_alerts (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  card_id UUID REFERENCES default_cards(id) ON DELETE CASCADE,
+  alert_type VARCHAR(20) NOT NULL, -- 'price_drop', 'price_increase', 'available_locally'
+  threshold_price DECIMAL(10,2),
+  threshold_percentage INTEGER, -- for percentage-based alerts
+  is_active BOOLEAN DEFAULT true,
+  last_triggered TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User activity log for analytics
+CREATE TABLE user_activities (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  activity_type VARCHAR(50) NOT NULL, -- 'card_added', 'card_sold', 'trade_completed', etc.
+  description TEXT,
+  metadata JSONB, -- flexible field for additional data
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_profiles_location ON profiles USING GIST (location_coordinates);
+CREATE INDEX idx_profiles_username ON profiles (username);
+CREATE INDEX idx_default_cards_name ON default_cards (name);
+CREATE INDEX idx_default_cards_set_code ON default_cards (set_code);
+CREATE INDEX idx_default_cards_scryfall_id ON default_cards (scryfall_id);
+CREATE INDEX idx_default_cards_tcgplayer_id ON default_cards (tcgplayer_id);
+CREATE INDEX idx_card_prices_card_date ON card_prices (card_id, price_date DESC);
+CREATE INDEX idx_user_cards_user_id ON user_cards (user_id);
+CREATE INDEX idx_user_cards_card_id ON user_cards (card_id);
+CREATE INDEX idx_user_cards_container_id ON user_cards (container_id);
+CREATE INDEX idx_user_cards_for_sale ON user_cards (is_for_sale) WHERE is_for_sale = true;
+CREATE INDEX idx_wishlist_user_id ON wishlist_items (user_id);
+CREATE INDEX idx_transactions_buyer_seller ON transactions (buyer_id, seller_id);
+CREATE INDEX idx_transactions_status ON transactions (status);
+CREATE INDEX idx_messages_conversation ON messages (conversation_id, created_at DESC);
+CREATE INDEX idx_containers_user_id ON containers (user_id);
+
+-- Row Level Security (RLS) policies
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE containers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wishlist_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transaction_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transaction_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE price_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
+
+-- Basic RLS policies (you'll need to customize these based on your specific requirements)
+CREATE POLICY "Users can view their own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can view their own containers" ON containers FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can view public containers" ON containers FOR SELECT USING (visibility = 'public');
+
+CREATE POLICY "Users can manage their own cards" ON user_cards FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can view cards for sale" ON user_cards FOR SELECT USING (is_for_sale = true);
+
+CREATE POLICY "Users can manage their own wishlist" ON wishlist_items FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view transactions they're involved in" ON transactions 
+  FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
+
+CREATE POLICY "Users can view their own messages" ON messages 
+  FOR SELECT USING (
+    auth.uid() IN (
+      SELECT participant1_id FROM conversations WHERE id = conversation_id
+      UNION
+      SELECT participant2_id FROM conversations WHERE id = conversation_id
+    )
+  );
+
+-- Functions for common operations
+CREATE OR REPLACE FUNCTION update_user_rating(user_uuid UUID)
+RETURNS void AS $$
+BEGIN
+  INSERT INTO user_ratings (user_id, total_reviews, recommend_count, neutral_count, not_recommend_count, average_rating)
+  SELECT 
+    user_uuid,
+    COUNT(*),
+    COUNT(*) FILTER (WHERE rating = 'recommend'),
+    COUNT(*) FILTER (WHERE rating = 'neutral'),
+    COUNT(*) FILTER (WHERE rating = 'not_recommend'),
+    CASE 
+      WHEN COUNT(*) = 0 THEN 0
+      ELSE (
+        COUNT(*) FILTER (WHERE rating = 'recommend') * 5.0 +
+        COUNT(*) FILTER (WHERE rating = 'neutral') * 3.0 +
+        COUNT(*) FILTER (WHERE rating = 'not_recommend') * 1.0
+      ) / COUNT(*)
+    END
+  FROM transaction_reviews 
+  WHERE reviewed_user_id = user_uuid
+  ON CONFLICT (user_id) 
+  DO UPDATE SET
+    total_reviews = EXCLUDED.total_reviews,
+    recommend_count = EXCLUDED.recommend_count,
+    neutral_count = EXCLUDED.neutral_count,
+    not_recommend_count = EXCLUDED.not_recommend_count,
+    average_rating = EXCLUDED.average_rating,
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update user ratings when reviews are added
+CREATE OR REPLACE FUNCTION trigger_update_user_rating()
+RETURNS trigger AS $$
+BEGIN
+  PERFORM update_user_rating(NEW.reviewed_user_id);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_rating_after_review
+  AFTER INSERT OR UPDATE ON transaction_reviews
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_update_user_rating();
+
+-- Function to create default container for new users
+CREATE OR REPLACE FUNCTION create_default_container()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO containers (user_id, name, container_type, is_default)
+  VALUES (NEW.id, 'Unorganized Cards', 'custom', true);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER create_default_container_trigger
+  AFTER INSERT ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION create_default_container();
