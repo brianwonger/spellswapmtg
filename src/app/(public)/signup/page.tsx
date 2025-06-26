@@ -20,6 +20,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [isSignedUp, setIsSignedUp] = useState(false)
+  const [signupError, setSignupError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -27,9 +28,11 @@ export default function SignupPage() {
     event.preventDefault()
     if (password.length > 0 && password.length < 6) {
       setPasswordError('Password must be at least 6 characters long.')
+      setSignupError(null)
       return
     }
     setPasswordError(null)
+    setSignupError(null)
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -39,15 +42,24 @@ export default function SignupPage() {
         },
       })
 
+      // Add detailed logging for debugging
+      console.log('Supabase signUp response:', { data, error })
+
       if (error) {
-        console.error('Error signing up:', error)
+        if (error.message && error.message.toLowerCase().includes('user already registered')) {
+          setSignupError('This email is already registered. Please log in or use a different email.')
+        } else {
+          setSignupError(error.message || 'An error occurred during signup. Please try again.')
+        }
         return
       }
 
       if (data.user) {
         setIsSignedUp(true)
+        setSignupError(null)
       }
-    } catch (error) {
+    } catch (error: any) {
+      setSignupError(error.message || 'Unexpected error during signup. Please try again.')
       console.error('Unexpected error during signup:', error)
     }
   }
@@ -64,6 +76,11 @@ export default function SignupPage() {
               We've sent a confirmation link to {email}. Please check your inbox
               to complete the sign up process.
             </p>
+            <div className="mt-6">
+              <Link href="/login" passHref>
+                <Button className="w-full">login page</Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -80,6 +97,9 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {signupError && (
+            <div className="mb-2 text-red-500 text-sm text-center">{signupError}</div>
+          )}
           <form onSubmit={handleSignUp} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -89,7 +109,10 @@ export default function SignupPage() {
                 placeholder="m@example.com"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  setSignupError(null)
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -99,7 +122,10 @@ export default function SignupPage() {
                 type="password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setSignupError(null)
+                }}
               />
               {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
             </div>
