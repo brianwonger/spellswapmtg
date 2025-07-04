@@ -1,0 +1,47 @@
+View Collection (Remaining Features)
+Add collection statistics/summary (total cards, total value, etc.)
+Implement search functionality (the search input is there but not working)
+Add sorting functionality (the sort dropdown is there but not working)
+Add container/deck organization (the container dropdown is there but not working)
+Add color filter to the filter dialog
+Add set filter to the filter dialog
+Add pagination or infinite scroll for large collections
+Card Management
+Implement "Remove cards" functionality
+Add ability to mark cards as "for trade" or "for sale"
+Add ability to update card condition
+Add ability to edit card notes
+Add ability to update card quantities
+Implement bulk import/export of collection data
+Add ability to bulk edit cards
+Organization
+Implement custom categories or tags system
+Add deck building functionality
+Add ability to group cards by format (Standard, Modern, Commander)
+Add favorite/bookmark system for cards
+Create want lists from missing cards
+Trading/Selling Features
+Add ability to set prices for cards marked for sale
+Add ability to set trade preferences
+Add market price comparison
+Add price history tracking
+Add condition-based price suggestions
+Collection Analysis
+Add collection value statistics and charts
+Add set completion tracking
+Add deck building recommendations based on collection
+Add duplicate card identification
+Add collection progress visualization
+Sharing/Social
+Add ability to share collection or specific cards
+Add export functionality (PDF, CSV, etc.)
+Add public/private visibility settings
+Add social features (comments, likes, etc.)
+UI/UX Improvements
+Add card hover previews
+Add card details modal/page
+Add drag-and-drop organization
+Add keyboard shortcuts
+Add bulk selection functionality
+Improve loading states and animations
+Add better error handling and feedback

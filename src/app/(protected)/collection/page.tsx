@@ -1,6 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+'use client'
+
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -8,17 +9,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Filter, Plus } from "lucide-react"
+import { Search, Plus } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/client"
+import { CollectionContent } from "@/components/collection/collection-content"
+import { CollectionStats } from "@/components/collection/collection-stats"
+import { useEffect, useState } from "react"
 
 type ScryfallImageUris = {
-  small: string    // Smallest size (146x204)
-  normal: string   // Normal size (488x680)
-  large: string    // Large size (672x936)
-  png: string      // PNG version
-  art_crop: string // Cropped artwork only
-  border_crop: string // Full card with borders cropped
+  small: string
+  normal: string
+  large: string
+  png: string
+  art_crop: string
+  border_crop: string
 }
 
 type CardDetails = {
@@ -30,6 +34,8 @@ type CardDetails = {
     usd?: string
     [key: string]: string | undefined
   }
+  type_line: string
+  rarity: string
 }
 
 type UserCard = {
@@ -43,52 +49,154 @@ type UserCard = {
   default_cards: CardDetails
 }
 
-const getCardImageUrl = (imageUris: any): string => {
-  if (!imageUris) return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
-  
-  // Parse the JSONB data if it's a string
-  const uris = typeof imageUris === 'string' ? JSON.parse(imageUris) : imageUris
-  
-  return uris.normal || 
-         uris.large || 
-         uris.small || 
-         'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
-}
+export default function CollectionPage() {
+  const [userCards, setUserCards] = useState<UserCard[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sortBy, setSortBy] = useState("name")
+  const [container, setContainer] = useState("all")
 
-export default async function CollectionPage() {
-  const supabase = await createClient()
+  useEffect(() => {
+    fetchUserCards()
+  }, [])
 
-  // Get the current user's ID
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  async function fetchUserCards() {
+    try {
+      const supabase = createClient()
+      
+      // Get the current user's ID
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError("User not authenticated")
+        setLoading(false)
+        return
+      }
 
-  // Fetch user's cards with card details
-  const { data: userCards, error } = await supabase
-    .from('user_cards')
-    .select(`
-      id,
-      quantity,
-      condition,
-      foil,
-      notes,
-      is_for_sale,
-      sale_price,
-      default_cards!inner (
-        id,
-        name,
-        set_name,
-        image_uris,
-        prices
-      )
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .returns<UserCard[]>()
+      // Fetch user's cards with card details
+      const { data: userCards, error } = await supabase
+        .from('user_cards')
+        .select(`
+          id,
+          quantity,
+          condition,
+          foil,
+          notes,
+          is_for_sale,
+          sale_price,
+          default_cards (
+            id,
+            name,
+            set_name,
+            image_uris,
+            prices,
+            type_line,
+            rarity
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching collection:', error)
+        setError('Error loading collection')
+      } else {
+        // Transform the data to match our expected type
+        const transformedCards = (userCards || []).map(card => ({
+          ...card,
+          default_cards: Array.isArray(card.default_cards) 
+            ? card.default_cards[0] 
+            : card.default_cards
+        })) as UserCard[]
+        setUserCards(transformedCards)
+      }
+    } catch (err) {
+      console.error('Error:', err)
+      setError('Failed to load collection')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function deleteCard(cardId: string) {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      
+      const { error } = await supabase
+        .from('user_cards')
+        .delete()
+        .eq('id', cardId)
+
+      if (error) {
+        console.error('Error deleting card:', error)
+        setError('Failed to delete card')
+        return false
+      }
+
+      // Update local state
+      setUserCards(prev => prev.filter(card => card.id !== cardId))
+      return true
+    } catch (err) {
+      console.error('Error:', err)
+      setError('Failed to delete card')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateCardStatus(cardId: string, updates: { 
+    is_for_sale?: boolean
+    sale_price?: number | null 
+  }) {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      
+      const { error } = await supabase
+        .from('user_cards')
+        .update(updates)
+        .eq('id', cardId)
+
+      if (error) {
+        console.error('Error updating card:', error)
+        setError('Failed to update card')
+        return false
+      }
+
+      // Update local state
+      setUserCards(prev => prev.map(card => 
+        card.id === cardId 
+          ? { ...card, ...updates }
+          : card
+      ))
+      return true
+    } catch (err) {
+      console.error('Error:', err)
+      setError('Failed to update card')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="container py-8">Loading collection...</div>
+  }
 
   if (error) {
-    console.error('Error fetching collection:', error)
-    return <div>Error loading collection</div>
+    return <div className="container py-8">Error: {error}</div>
   }
+
+  // Calculate collection statistics
+  const totalCards = userCards.reduce((sum, card) => sum + card.quantity, 0)
+  const uniqueCards = userCards.length
+  const totalValue = userCards.reduce((sum, card) => {
+    const cardPrice = parseFloat(card.default_cards.prices.usd || '0')
+    return sum + (cardPrice * card.quantity)
+  }, 0)
+  const averageValue = totalCards > 0 ? totalValue / totalCards : 0
 
   return (
     <div className="container py-8 space-y-6">
@@ -105,13 +213,25 @@ export default async function CollectionPage() {
         </div>
       </div>
 
+      <CollectionStats
+        totalCards={totalCards}
+        uniqueCards={uniqueCards}
+        totalValue={totalValue}
+        averageValue={averageValue}
+      />
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search cards..." className="pl-8" />
+          <Input 
+            placeholder="Search cards..." 
+            className="pl-8" 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <div className="flex gap-2">
-          <Select defaultValue="all">
+          <Select value={container} onValueChange={setContainer}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Container" />
             </SelectTrigger>
@@ -121,7 +241,7 @@ export default async function CollectionPage() {
               <SelectItem value="binder1">Trade Binder</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="name">
+          <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -131,53 +251,16 @@ export default async function CollectionPage() {
               <SelectItem value="condition">Condition</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {userCards?.map((card) => {
-          const cardDetails = card.default_cards
-          const imageUrl = getCardImageUrl(cardDetails.image_uris)
-          const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
-
-          return (
-            <Card key={card.id} className="overflow-hidden">
-              <div className="aspect-[3/4] relative">
-                <img
-                  src={imageUrl}
-                  alt={cardDetails.name}
-                  className="object-cover w-full h-full"
-                  loading="lazy"
-                />
-              </div>
-              <CardHeader>
-                <CardTitle className="text-lg">{cardDetails.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-1">
-                  <div className="text-sm text-muted-foreground">
-                    {cardDetails.set_name} • {card.condition.replace('_', ' ')}
-                    {card.foil && ' • Foil'}
-                    {card.quantity > 1 && ` • Qty: ${card.quantity}`}
-                  </div>
-                  <div className="font-medium">
-                    ${price.toLocaleString()}
-                    {card.is_for_sale && ' (For Sale)'}
-                  </div>
-                  {card.notes && (
-                    <div className="text-sm text-muted-foreground mt-2">
-                      {card.notes}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <CollectionContent 
+        userCards={userCards} 
+        searchTerm={searchTerm}
+        sortBy={sortBy}
+        onDeleteCard={deleteCard}
+        onUpdateCardStatus={updateCardStatus}
+      />
     </div>
   )
 } 
