@@ -34,6 +34,113 @@ CREATE TABLE user_ratings (
   UNIQUE(user_id)
 );
 
+-- This script creates a table optimized for PostgreSQL to store card data,
+-- likely from a source like the Scryfall API. It utilizes the JSONB data
+-- type for improved performance and indexing capabilities on JSON data.
+-- The primary key is set to 'id', which is a unique identifier for each card printing.
+
+CREATE TABLE default_cards (
+    -- Core Card Identifiers
+    id UUID PRIMARY KEY,
+    oracle_id UUID,
+    object VARCHAR(50), -- e.g., 'card', 'error'
+    mtgo_id INT,
+    mtgo_foil_id INT,
+    arena_id INT,
+    tcgplayer_id INT,
+    cardmarket_id INT,
+
+    -- Core Card Details
+    name VARCHAR(255) NOT NULL,
+    lang VARCHAR(10) NOT NULL,
+    released_at DATE,
+    mana_cost VARCHAR(100),
+    cmc DECIMAL(10, 2), -- Converted Mana Cost
+    type_line VARCHAR(255),
+    oracle_text TEXT,
+    power VARCHAR(10), -- Using VARCHAR to accommodate values like '*', 'X', '1+*'
+    toughness VARCHAR(10), -- Using VARCHAR for the same reason as 'power'
+    flavor_text TEXT,
+
+    -- Gameplay Properties
+    reserved BOOLEAN,
+    legalities JSONB, -- Using JSONB for efficient querying and indexing of JSON data in PostgreSQL.
+    games JSONB, -- e.g., ['paper', 'arena', 'mtgo']
+    multiverse_ids JSONB,
+    keywords JSONB, -- e.g., ['Flying', 'Vigilance']
+    produced_mana JSONB, -- e.g., ['W', 'U']
+    edhrec_rank INT,
+    penny_rank INT,
+    game_changer BOOLEAN,
+
+    -- Set and Printing Information
+    set_id UUID,
+    "set" VARCHAR(10) NOT NULL, -- "set" is a reserved keyword in SQL, so it's quoted.
+    set_name VARCHAR(255),
+    set_type VARCHAR(50),
+    set_uri TEXT,
+    set_search_uri TEXT,
+    scryfall_set_uri TEXT,
+    collector_number VARCHAR(20),
+    reprint BOOLEAN,
+    variation BOOLEAN,
+    digital BOOLEAN,
+    rarity VARCHAR(20), -- e.g., 'common', 'uncommon', 'rare', 'mythic'
+
+    -- Finishes and Variants
+    foil BOOLEAN,
+    nonfoil BOOLEAN,
+    oversized BOOLEAN,
+    promo BOOLEAN,
+    textless BOOLEAN,
+    full_art BOOLEAN,
+    story_spotlight BOOLEAN,
+    booster BOOLEAN,
+    finishes JSONB,
+
+    -- Card Appearance
+    layout VARCHAR(50),
+    frame VARCHAR(20),
+    border_color VARCHAR(20),
+    card_back_id UUID,
+    artist VARCHAR(255),
+    artist_ids JSONB,
+    illustration_id UUID,
+
+    -- Color Information
+    colors JSONB, -- e.g., ['W', 'U']
+    color_identity JSONB, -- e.g., ['W', 'U']
+
+    -- URIs and Image Status
+    uri TEXT,
+    scryfall_uri TEXT,
+    highres_image BOOLEAN,    
+    image_status VARCHAR(50),
+    image_uri TEXT,
+    related_uris JSONB,
+    prints_search_uri TEXT,
+    rulings_uri TEXT,
+    
+
+    -- Pricing Data
+    prices JSONB, -- e.g., {'usd': '0.10', 'usd_foil': '0.25'}
+    purchase_uri TEXT
+);
+
+-- Create indexes on frequently searched columns to improve query performance.
+CREATE INDEX idx_cards_name ON defaultcards(name);
+CREATE INDEX idx_cards_oracle_id ON defaultcards(oracle_id);
+CREATE INDEX idx_cards_set ON defaultcards("set");
+CREATE INDEX idx_cards_collector_number ON defaultcards(collector_number);
+
+-- Optional: For even faster searches within the JSONB columns, you can create GIN indexes.
+-- For example, to quickly find cards with a specific keyword:
+-- CREATE INDEX idx_cards_keywords_gin ON cards USING GIN (keywords);
+-- To find cards that are legal in a specific format:
+-- CREATE INDEX idx_cards_legalities_gin ON cards USING GIN (legalities);
+
+
+/*
 -- Master card database (imported from CSV)
 CREATE TABLE default_cards (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -99,6 +206,7 @@ CREATE TABLE default_cards (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+*/
 
 -- Card pricing history
 CREATE TABLE card_prices (
