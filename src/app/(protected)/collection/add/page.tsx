@@ -29,7 +29,7 @@ interface Card {
   type_line: string
   oracle_text: string
   flavor_text?: string
-  image_uri?: string
+  image_uris: string | null
   set_name: string
 }
 
@@ -54,6 +54,26 @@ const CONDITION_LABELS: Record<typeof CONDITIONS[number], string> = {
   poor: "Poor"
 }
 
+const getCardImageUrl = (imageUris: string | null | undefined): string => {
+  if (!imageUris) return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  
+  try {
+    // Parse the JSON string
+    const uris = JSON.parse(imageUris)
+    
+    // Add defensive check for null uris after parsing
+    if (!uris) return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+    
+    return uris.normal || 
+           uris.large || 
+           uris.small || 
+           'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  } catch (error) {
+    console.error('Error parsing image URIs:', error, 'Raw value:', imageUris)
+    return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  }
+}
+
 export default function AddCardsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Card[]>([])
@@ -70,11 +90,17 @@ export default function AddCardsPage() {
     try {
       const { data, error } = await supabase
         .from('default_cards')
-        .select('*')
+        .select('id, name, type_line, oracle_text, flavor_text, image_uris, set_name')
         .or(`name.ilike.%${searchQuery}%,type_line.ilike.%${searchQuery}%,oracle_text.ilike.%${searchQuery}%,flavor_text.ilike.%${searchQuery}%`)
         .limit(20)
 
       if (error) throw error
+      
+      // Log the first result to debug
+      if (data && data.length > 0) {
+        console.log('First card data:', JSON.stringify(data[0], null, 2))
+      }
+      
       setSearchResults(data || [])
     } catch (error) {
       console.error('Error searching cards:', error)
@@ -193,15 +219,14 @@ export default function AddCardsPage() {
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {searchResults.map((card) => (
             <Card key={card.id} className="overflow-hidden">
-              {card.image_uri && (
-                <div className="aspect-[3/4] relative">
-                  <img
-                    src={card.image_uri}
-                    alt={card.name}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
-              )}
+              <div className="aspect-[3/4] relative">
+                <img
+                  src={getCardImageUrl(card.image_uris)}
+                  alt={card.name}
+                  className="object-cover w-full h-full"
+                  loading="lazy"
+                />
+              </div>
               <CardHeader>
                 <CardTitle className="text-lg">{card.name}</CardTitle>
               </CardHeader>

@@ -116,7 +116,7 @@ CREATE TABLE default_cards (
     scryfall_uri TEXT,
     highres_image BOOLEAN,    
     image_status VARCHAR(50),
-    image_uri TEXT,
+    image_uris TEXT,
     related_uris JSONB,
     prints_search_uri TEXT,
     rulings_uri TEXT,
