@@ -24,6 +24,7 @@ export interface UserCard {
   container_items?: {
     id: string
     container_id: string
+    quantity: number
     containers: {
       id: string
       name: string

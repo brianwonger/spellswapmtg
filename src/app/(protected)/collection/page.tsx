@@ -39,6 +39,7 @@ interface DatabaseUserCard {
   container_items?: {
     id: string
     container_id: string
+    quantity: number
     containers: {
       id: string
       name: string
@@ -58,8 +59,33 @@ export default function CollectionPage() {
   const [availableContainers, setAvailableContainers] = useState<Container[]>([])
 
   useEffect(() => {
-    fetchUserCards()
+    async function fetchData() {
+      await fetchUserCards()
+      await fetchContainers()
+    }
+    fetchData()
   }, [])
+
+  async function fetchContainers() {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: containers, error } = await supabase
+        .from('containers')
+        .select('*')
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Error fetching containers:', error)
+      } else {
+        setAvailableContainers(containers || [])
+      }
+    } catch (err) {
+      console.error("Error fetching containers:", err)
+    }
+  }
 
   async function fetchUserCards() {
     try {
@@ -98,6 +124,7 @@ export default function CollectionPage() {
           container_items (
             id,
             container_id,
+            quantity,
             containers (
               id,
               name,
@@ -122,6 +149,7 @@ export default function CollectionPage() {
           const containerItems = (card.container_items || []).map(item => ({
             id: item.id,
             container_id: item.container_id,
+            quantity: item.quantity,
             containers: item.containers && {
               id: item.containers.id,
               name: item.containers.name,
@@ -154,23 +182,23 @@ export default function CollectionPage() {
         })
         setUserCards(transformedCards)
 
-        // Get unique containers for the dropdown
-        const allContainers = ((userCards as unknown as DatabaseUserCard[]) || [])
-          .flatMap(card => card.container_items || [])
-          .map(item => item.containers)
-          .filter((container): container is NonNullable<typeof container> => container !== null)
-          .map(container => ({
-            id: container.id,
-            name: container.name,
-            container_type: container.container_type,
-            is_default: container.is_default
-          }))
+        // No longer need to derive containers from cards
+        // const allContainers = ((userCards as unknown as DatabaseUserCard[]) || [])
+        //   .flatMap(card => card.container_items || [])
+        //   .map(item => item.containers)
+        //   .filter((container): container is NonNullable<typeof container> => container !== null)
+        //   .map(container => ({
+        //     id: container.id,
+        //     name: container.name,
+        //     container_type: container.container_type,
+        //     is_default: container.is_default
+        //   }))
 
-        const uniqueContainers = Array.from(new Set(allContainers.map(c => c.id)))
-          .map(id => allContainers.find(c => c.id === id))
-          .filter((c): c is Container => c !== undefined)
+        // const uniqueContainers = Array.from(new Set(allContainers.map(c => c.id)))
+        //   .map(id => allContainers.find(c => c.id === id))
+        //   .filter((c): c is Container => c !== undefined)
 
-        setAvailableContainers(uniqueContainers)
+        // setAvailableContainers(uniqueContainers)
       }
     } catch (err) {
       console.error('Error:', err)
@@ -243,87 +271,197 @@ export default function CollectionPage() {
     }
   }
 
+  async function updateCard(cardId: string, updates: {
+    quantity: number
+    condition: string
+    foil: boolean
+    notes: string | null
+    is_for_sale: boolean
+    sale_price: number | null
+  }) {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      
+      const { error } = await supabase
+        .from('user_cards')
+        .update(updates)
+        .eq('id', cardId)
+
+      if (error) {
+        console.error('Error updating card:', error)
+        setError('Failed to update card')
+        return false
+      }
+
+      // Update local state
+      setUserCards(prev => prev.map(card => 
+        card.id === cardId 
+          ? { ...card, ...updates }
+          : card
+      ))
+      return true
+    } catch (err) {
+      console.error('Error:', err)
+      setError('Failed to update card')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateCardContainerItems(userCardId: string, updates: { container_id: string; quantity: number }[]) {
+    try {
+      const supabase = createClient()
+      
+      // Get current assignments
+      const { data: existingItems, error: fetchError } = await supabase
+        .from('container_items')
+        .select('id, container_id')
+        .eq('user_card_id', userCardId)
+
+      if (fetchError) {
+        console.error('Error fetching existing container items:', fetchError)
+        setError('Failed to update container assignments')
+        return false
+      }
+
+      const upsertPromises = updates.map(update => {
+        const existing = existingItems?.find(item => item.container_id === update.container_id)
+        if (existing) {
+          // Update
+          return supabase.from('container_items').update({ quantity: update.quantity }).eq('id', existing.id)
+        } else {
+          // Insert
+          return supabase.from('container_items').insert({
+            user_card_id: userCardId,
+            container_id: update.container_id,
+            quantity: update.quantity
+          })
+        }
+      })
+      
+      const deleteIds = existingItems
+        ?.filter(item => !updates.some(u => u.container_id === item.container_id))
+        .map(item => item.id)
+
+      const deletePromises = (deleteIds || []).map(id => 
+        supabase.from('container_items').delete().eq('id', id)
+      )
+
+      const results = await Promise.all([...upsertPromises, ...deletePromises])
+      const anyErrors = results.some(res => res.error)
+
+      if (anyErrors) {
+        results.forEach(res => {
+          if (res.error) console.error('Error in container item update:', res.error)
+        })
+        setError('An error occurred while updating container assignments.')
+        return false
+      }
+      
+      // Refresh card data to show new assignments
+      await fetchUserCards()
+      return true
+
+    } catch(err) {
+      console.error('Error updating container items:', err)
+      setError('Failed to update container assignments')
+      return false
+    }
+  }
+
   if (loading) {
     return <div className="container py-8">Loading collection...</div>
   }
 
   if (error) {
-    return <div className="container py-8">Error: {error}</div>
+    return <div className="container py-8 text-red-500">Error: {error}</div>
   }
 
   // Calculate collection statistics
   const totalCards = userCards.reduce((sum, card) => sum + card.quantity, 0)
   const uniqueCards = userCards.length
   const totalValue = calculateTotalValue(userCards)
-  const averageValue = totalCards > 0 ? totalValue / totalCards : 0
+  const averageValue = uniqueCards > 0 ? totalValue / uniqueCards : 0
 
   return (
-    <div className="container py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">My Collection</h1>
-        <div className="flex gap-2">
-          <Button>Import Cards</Button>
-          <Link href="/collection/add">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Cards
-            </Button>
-          </Link>
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
+        <div className="container py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">My Collection</h1>
+            <div className="flex gap-2">
+              <Link href="/collection/containers">
+                <Button variant="outline">
+                  Manage Containers
+                </Button>
+              </Link>
+              <Link href="/collection/add">
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Cards
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <CollectionStats
-        totalCards={totalCards}
-        uniqueCards={uniqueCards}
-        totalValue={totalValue}
-        averageValue={averageValue}
-      />
-
-      <div className="flex flex-col gap-4 md:flex-row md:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search cards..." 
-            className="pl-8" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+      </header>
+      <main className="flex-1 p-4 md:p-6">
+        <CollectionStats
+          totalCards={totalCards}
+          uniqueCards={uniqueCards}
+          totalValue={totalValue}
+          averageValue={averageValue}
+        />
+        <div className="flex flex-col gap-4 pt-6">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Input
+                type="search"
+                placeholder="Search cards..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="price">Price</SelectItem>
+                <SelectItem value="condition">Condition</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={container} onValueChange={setContainer}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Container..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Containers</SelectItem>
+                {availableContainers.map(container => (
+                  <SelectItem key={container.id} value={container.id}>
+                    {container.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <CollectionContent
+            userCards={userCards}
+            searchTerm={searchTerm}
+            sortBy={sortBy}
+            container={container}
+            onDeleteCard={deleteCard}
+            onUpdateCardStatus={updateCardStatus}
+            onUpdateCard={updateCard}
+            availableContainers={availableContainers}
+            onUpdateContainerItems={updateCardContainerItems}
           />
         </div>
-        <div className="flex gap-2">
-          <Select value={container} onValueChange={setContainer}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Container" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Cards</SelectItem>
-              {availableContainers.map(container => (
-                <SelectItem key={container.id} value={container.id}>
-                  {container.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">Name</SelectItem>
-              <SelectItem value="price">Price</SelectItem>
-              <SelectItem value="condition">Condition</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <CollectionContent 
-        userCards={userCards} 
-        searchTerm={searchTerm}
-        sortBy={sortBy}
-        container={container}
-        onDeleteCard={deleteCard}
-        onUpdateCardStatus={updateCardStatus}
-      />
+      </main>
     </div>
   )
 } 

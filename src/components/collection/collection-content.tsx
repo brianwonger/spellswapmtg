@@ -7,6 +7,8 @@ import { FilterDialog, CardFilters } from "./filter-dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { UserCard, CardDetails } from '@/lib/types'
+import { EditCardDialog } from "./edit-card-dialog"
+import { Container } from '@/lib/types'
 
 interface CollectionContentProps {
   userCards: UserCard[]
@@ -18,6 +20,16 @@ interface CollectionContentProps {
     is_for_sale?: boolean
     sale_price?: number | null 
   }) => Promise<boolean>
+  onUpdateCard: (cardId: string, updates: {
+    quantity: number
+    condition: string
+    foil: boolean
+    notes: string | null
+    is_for_sale: boolean
+    sale_price: number | null
+  }) => Promise<boolean>
+  availableContainers: Container[]
+  onUpdateContainerItems: (userCardId: string, updates: { container_id: string; quantity: number }[]) => Promise<boolean>
 }
 
 const getCardImageUrl = (imageUris: string | null): string => {
@@ -46,11 +58,15 @@ export function CollectionContent({
   sortBy = "name",
   container = "all",
   onDeleteCard,
-  onUpdateCardStatus 
+  onUpdateCardStatus,
+  onUpdateCard,
+  availableContainers,
+  onUpdateContainerItems
 }: CollectionContentProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [priceInput, setPriceInput] = useState<string>("")
+  const [editingCard, setEditingCard] = useState<UserCard | null>(null)
   const [filters, setFilters] = useState<CardFilters>({
     colors: [],
     type: null,
@@ -179,6 +195,16 @@ export function CollectionContent({
                   <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                 </svg>
               </button>
+              <button
+                onClick={() => setEditingCard(card)}
+                className="absolute top-2 right-12 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                title="Edit card"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                  <path d="m15 5 4 4"></path>
+                </svg>
+              </button>
             </div>
             <CardHeader>
               <CardTitle className="text-lg">{cardDetails.name}</CardTitle>
@@ -285,6 +311,16 @@ export function CollectionContent({
                     <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                   </svg>
                 </button>
+                <button
+                  onClick={() => setEditingCard(card)}
+                  className="absolute top-1 right-12 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                  title="Edit card"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                    <path d="m15 5 4 4"></path>
+                  </svg>
+                </button>
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold">{cardDetails.name}</h3>
@@ -370,12 +406,24 @@ export function CollectionContent({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end gap-2">
-        <FilterDialog filters={filters} onFiltersChange={setFilters} />
+    <>
+      <div className="flex items-center justify-between mb-6">
         <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
+        <FilterDialog filters={filters} onFiltersChange={setFilters} />
       </div>
+
       {viewMode === 'grid' ? <GridView /> : <ListView />}
-    </div>
+
+      {editingCard && (
+        <EditCardDialog
+          card={editingCard}
+          open={!!editingCard}
+          onOpenChange={(open) => !open && setEditingCard(null)}
+          onUpdateCard={onUpdateCard}
+          containers={availableContainers}
+          onUpdateContainerItems={onUpdateContainerItems}
+        />
+      )}
+    </>
   )
 } 
