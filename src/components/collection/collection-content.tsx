@@ -6,44 +6,13 @@ import { ViewMode, ViewToggle } from "../ui/view-toggle"
 import { FilterDialog, CardFilters } from "./filter-dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-
-type ScryfallImageUris = {
-  small: string
-  normal: string
-  large: string
-  png: string
-  art_crop: string
-  border_crop: string
-}
-
-type CardDetails = {
-  id: string
-  name: string
-  set_name: string
-  image_uris: ScryfallImageUris | null
-  prices: {
-    usd?: string
-    [key: string]: string | undefined
-  }
-  type_line: string
-  rarity: string
-}
-
-type UserCard = {
-  id: string
-  quantity: number
-  condition: string
-  foil: boolean
-  notes: string | null
-  is_for_sale: boolean
-  sale_price: number | null
-  default_cards: CardDetails
-}
+import { UserCard, CardDetails } from '@/lib/types'
 
 interface CollectionContentProps {
   userCards: UserCard[]
   searchTerm?: string
   sortBy?: string
+  container?: string
   onDeleteCard: (cardId: string) => Promise<boolean>
   onUpdateCardStatus: (cardId: string, updates: { 
     is_for_sale?: boolean
@@ -51,22 +20,31 @@ interface CollectionContentProps {
   }) => Promise<boolean>
 }
 
-const getCardImageUrl = (imageUris: any): string => {
+const getCardImageUrl = (imageUris: string | null): string => {
   if (!imageUris) return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
   
-  // Parse the JSONB data if it's a string
-  const uris = typeof imageUris === 'string' ? JSON.parse(imageUris) : imageUris
-  
-  return uris.normal || 
-         uris.large || 
-         uris.small || 
-         'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  try {
+    // Parse the JSON string
+    const uris = JSON.parse(imageUris)
+    
+    // Add defensive check for null uris after parsing
+    if (!uris) return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+    
+    return uris.normal || 
+           uris.large || 
+           uris.small || 
+           'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  } catch (error) {
+    console.error('Error parsing image URIs:', error, 'Raw value:', imageUris)
+    return 'https://placehold.co/488x680/374151/e5e7eb?text=No+Image'
+  }
 }
 
 export function CollectionContent({ 
   userCards, 
   searchTerm = "", 
-  sortBy = "name", 
+  sortBy = "name",
+  container = "all",
   onDeleteCard,
   onUpdateCardStatus 
 }: CollectionContentProps) {
@@ -86,6 +64,14 @@ export function CollectionContent({
 
   // Apply search filtering
   const searchFilteredCards = userCards.filter(card => {
+    // First apply container filter
+    if (container !== "all") {
+      const containerItem = card.container_items?.[0]
+      if (!containerItem || containerItem.container_id !== container) {
+        return false
+      }
+    }
+
     if (!searchTerm.trim()) return true
     
     const searchLower = searchTerm.toLowerCase()

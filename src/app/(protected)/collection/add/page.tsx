@@ -163,22 +163,36 @@ export default function AddCardsPage() {
         containerId = newContainer.id
       }
 
-      // Add the card to the user's collection
-      const { error: insertError } = await supabase
+      // First, add the card to user_cards
+      const { data: userCard, error: insertError } = await supabase
         .from('user_cards')
         .insert([
           {
             card_id: selectedCard.id,
             user_id: user.id,
-            container_id: containerId,
             quantity,
             condition,
             foil: false, // Default to non-foil
             language: 'english' // Default language
           }
         ])
+        .select('id')
+        .single()
 
       if (insertError) throw insertError
+
+      // Then, create the container_items entry
+      const { error: containerItemError } = await supabase
+        .from('container_items')
+        .insert([
+          {
+            user_card_id: userCard.id,
+            container_id: containerId,
+            quantity: quantity
+          }
+        ])
+
+      if (containerItemError) throw containerItemError
       
       toast.success(`Added ${quantity}x ${selectedCard.name} to collection`)
       setSelectedCard(null)

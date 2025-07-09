@@ -15,30 +15,9 @@ import { createClient } from "@/lib/supabase/client"
 import { CollectionContent } from "@/components/collection/collection-content"
 import { CollectionStats } from "@/components/collection/collection-stats"
 import { useEffect, useState } from "react"
+import { UserCard, Container, CardDetails } from '@/lib/types'
 
-type ScryfallImageUris = {
-  small: string
-  normal: string
-  large: string
-  png: string
-  art_crop: string
-  border_crop: string
-}
-
-type CardDetails = {
-  id: string
-  name: string
-  set_name: string
-  image_uris: ScryfallImageUris | null
-  prices: {
-    usd?: string
-    [key: string]: string | undefined
-  }
-  type_line: string
-  rarity: string
-}
-
-type UserCard = {
+interface DatabaseUserCard {
   id: string
   quantity: number
   condition: string
@@ -46,7 +25,27 @@ type UserCard = {
   notes: string | null
   is_for_sale: boolean
   sale_price: number | null
-  default_cards: CardDetails
+  default_cards: {
+    id: string
+    name: string
+    set_name: string
+    type_line: string
+    oracle_text: string | null
+    flavor_text: string | null
+    image_uris: string | null
+    prices: { usd?: string } | null
+    rarity: string
+  }
+  container_items?: {
+    id: string
+    container_id: string
+    containers: {
+      id: string
+      name: string
+      container_type: string
+      is_default: boolean
+    }
+  }[]
 }
 
 export default function CollectionPage() {
@@ -56,6 +55,7 @@ export default function CollectionPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("name")
   const [container, setContainer] = useState("all")
+  const [availableContainers, setAvailableContainers] = useState<Container[]>([])
 
   useEffect(() => {
     fetchUserCards()
@@ -73,7 +73,7 @@ export default function CollectionPage() {
         return
       }
 
-      // Fetch user's cards with card details
+      // Fetch user's cards with card details and container information
       const { data: userCards, error } = await supabase
         .from('user_cards')
         .select(`
@@ -91,7 +91,19 @@ export default function CollectionPage() {
             image_uris,
             prices,
             type_line,
-            rarity
+            rarity,
+            oracle_text,
+            flavor_text
+          ),
+          container_items (
+            id,
+            container_id,
+            containers (
+              id,
+              name,
+              container_type,
+              is_default
+            )
           )
         `)
         .eq('user_id', user.id)
@@ -102,13 +114,63 @@ export default function CollectionPage() {
         setError('Error loading collection')
       } else {
         // Transform the data to match our expected type
-        const transformedCards = (userCards || []).map(card => ({
-          ...card,
-          default_cards: Array.isArray(card.default_cards) 
+        const transformedCards = ((userCards as unknown as DatabaseUserCard[]) || []).map(card => {
+          const cardData = Array.isArray(card.default_cards) 
             ? card.default_cards[0] 
             : card.default_cards
-        })) as UserCard[]
+
+          const containerItems = (card.container_items || []).map(item => ({
+            id: item.id,
+            container_id: item.container_id,
+            containers: item.containers && {
+              id: item.containers.id,
+              name: item.containers.name,
+              container_type: item.containers.container_type,
+              is_default: item.containers.is_default
+            }
+          }))
+
+          return {
+            id: card.id,
+            quantity: card.quantity,
+            condition: card.condition,
+            foil: card.foil,
+            notes: card.notes,
+            is_for_sale: card.is_for_sale,
+            sale_price: card.sale_price,
+            default_cards: {
+              id: cardData.id,
+              name: cardData.name,
+              set_name: cardData.set_name,
+              type_line: cardData.type_line,
+              oracle_text: cardData.oracle_text || '',
+              flavor_text: cardData.flavor_text,
+              image_uris: cardData.image_uris,
+              prices: cardData.prices || {},
+              rarity: cardData.rarity
+            },
+            container_items: containerItems
+          } satisfies UserCard
+        })
         setUserCards(transformedCards)
+
+        // Get unique containers for the dropdown
+        const allContainers = ((userCards as unknown as DatabaseUserCard[]) || [])
+          .flatMap(card => card.container_items || [])
+          .map(item => item.containers)
+          .filter((container): container is NonNullable<typeof container> => container !== null)
+          .map(container => ({
+            id: container.id,
+            name: container.name,
+            container_type: container.container_type,
+            is_default: container.is_default
+          }))
+
+        const uniqueContainers = Array.from(new Set(allContainers.map(c => c.id)))
+          .map(id => allContainers.find(c => c.id === id))
+          .filter((c): c is Container => c !== undefined)
+
+        setAvailableContainers(uniqueContainers)
       }
     } catch (err) {
       console.error('Error:', err)
@@ -192,10 +254,7 @@ export default function CollectionPage() {
   // Calculate collection statistics
   const totalCards = userCards.reduce((sum, card) => sum + card.quantity, 0)
   const uniqueCards = userCards.length
-  const totalValue = userCards.reduce((sum, card) => {
-    const cardPrice = parseFloat(card.default_cards.prices.usd || '0')
-    return sum + (cardPrice * card.quantity)
-  }, 0)
+  const totalValue = calculateTotalValue(userCards)
   const averageValue = totalCards > 0 ? totalValue / totalCards : 0
 
   return (
@@ -237,8 +296,11 @@ export default function CollectionPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Cards</SelectItem>
-              <SelectItem value="deck1">Main Deck</SelectItem>
-              <SelectItem value="binder1">Trade Binder</SelectItem>
+              {availableContainers.map(container => (
+                <SelectItem key={container.id} value={container.id}>
+                  {container.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={setSortBy}>
@@ -258,9 +320,19 @@ export default function CollectionPage() {
         userCards={userCards} 
         searchTerm={searchTerm}
         sortBy={sortBy}
+        container={container}
         onDeleteCard={deleteCard}
         onUpdateCardStatus={updateCardStatus}
       />
     </div>
   )
+} 
+
+// Update the total value calculation to handle undefined prices
+function calculateTotalValue(cards: UserCard[]): number {
+  return cards.reduce((total, card) => {
+    const price = card.default_cards.prices?.usd
+    if (!price) return total
+    return total + (parseFloat(price) * card.quantity)
+  }, 0)
 } 
