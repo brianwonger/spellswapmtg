@@ -127,86 +127,11 @@ CREATE TABLE default_cards (
     purchase_uri TEXT
 );
 
--- Create indexes on frequently searched columns to improve query performance.
-CREATE INDEX idx_cards_name ON defaultcards(name);
-CREATE INDEX idx_cards_oracle_id ON defaultcards(oracle_id);
-CREATE INDEX idx_cards_set ON defaultcards("set");
-CREATE INDEX idx_cards_collector_number ON defaultcards(collector_number);
-
 -- Optional: For even faster searches within the JSONB columns, you can create GIN indexes.
 -- For example, to quickly find cards with a specific keyword:
 -- CREATE INDEX idx_cards_keywords_gin ON cards USING GIN (keywords);
 -- To find cards that are legal in a specific format:
 -- CREATE INDEX idx_cards_legalities_gin ON cards USING GIN (legalities);
-
-
-/*
--- Master card database (imported from CSV)
-CREATE TABLE default_cards (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  arena_id INTEGER,
-  artist VARCHAR(255),
-  artist_ids TEXT[], -- array of artist IDs
-  booster BOOLEAN,
-  border_color VARCHAR(20),
-  card_back_id UUID,
-  cmc DECIMAL(10,2), -- converted mana cost (can be fractional)
-  collector_number VARCHAR(20),
-  color_identity TEXT[], -- array of colors
-  colors TEXT[], -- array of colors
-  digital BOOLEAN,
-  finishes TEXT[], -- array of finishes like 'nonfoil', 'foil'
-  foil BOOLEAN,
-  frame VARCHAR(10),
-  full_art BOOLEAN,
-  game_changer BOOLEAN,
-  games TEXT[], -- array of games like 'paper', 'mtgo', 'arena'
-  highres_image BOOLEAN,
-  scryfall_id UUID UNIQUE NOT NULL, -- using scryfall ID as unique identifier
-  illustration_id UUID,
-  image_status VARCHAR(50),
-  image_uris JSONB, -- store all image URIs as JSON
-  keywords TEXT[], -- array of keywords
-  lang VARCHAR(10) DEFAULT 'en',
-  layout VARCHAR(50),
-  legalities JSONB, -- store all format legalities as JSON
-  mana_cost VARCHAR(50),
-  mtgo_id INTEGER,
-  multiverse_ids INTEGER[], -- array of multiverse IDs
-  name VARCHAR(255) NOT NULL,
-  nonfoil BOOLEAN,
-  oracle_id UUID,
-  oracle_text TEXT,
-  oversized BOOLEAN,
-  prices JSONB, -- store all pricing info as JSON
-  prints_search_uri TEXT,
-  produced_mana TEXT[], -- array of mana colors produced
-  promo BOOLEAN,
-  purchase_uris JSONB, -- store purchase URIs as JSON
-  rarity VARCHAR(20), -- 'common', 'uncommon', 'rare', 'mythic'
-  related_uris JSONB, -- store related URIs as JSON
-  released_at DATE,
-  reprint BOOLEAN,
-  reserved BOOLEAN,
-  rulings_uri TEXT,
-  scryfall_set_uri TEXT,
-  scryfall_uri TEXT,
-  set_code VARCHAR(10) NOT NULL, -- using 'set' field from JSON
-  set_id UUID,
-  set_name VARCHAR(255) NOT NULL,
-  set_search_uri TEXT,
-  set_type VARCHAR(50),
-  set_uri TEXT,
-  story_spotlight BOOLEAN,
-  tcgplayer_id INTEGER,
-  textless BOOLEAN,
-  type_line VARCHAR(255),
-  uri TEXT,
-  variation BOOLEAN,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-*/
 
 -- Card pricing history
 CREATE TABLE card_prices (
@@ -236,11 +161,12 @@ CREATE TABLE containers (
 );
 
 -- User card collection
+-- Each row represents a stack of identical cards owned by a user.
+-- The `container_items` table determines where these cards are located.
 CREATE TABLE user_cards (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   card_id UUID REFERENCES default_cards(id) ON DELETE CASCADE,
-  container_id UUID REFERENCES containers(id) ON DELETE SET NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
   condition VARCHAR(20) DEFAULT 'near_mint', -- 'mint', 'near_mint', 'excellent', 'good', 'light_played', 'played', 'poor'
   foil BOOLEAN DEFAULT false,
@@ -249,8 +175,23 @@ CREATE TABLE user_cards (
   is_for_sale BOOLEAN DEFAULT false,
   sale_price DECIMAL(10,2),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  -- Ensures a user has only one record for each unique card version (card, condition, foil, lang)
+  UNIQUE(user_id, card_id, condition, foil, language)
 );
+
+-- Join table to link user cards to containers (many-to-many relationship)
+CREATE TABLE container_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_card_id UUID REFERENCES user_cards(id) ON DELETE CASCADE,
+  container_id UUID REFERENCES containers(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (user_card_id, container_id)
+);
+
+
 
 -- User wishlist
 CREATE TABLE wishlist_items (
@@ -358,24 +299,27 @@ CREATE TABLE user_activities (
 CREATE INDEX idx_profiles_location ON profiles USING GIST (location_coordinates);
 CREATE INDEX idx_profiles_username ON profiles (username);
 CREATE INDEX idx_default_cards_name ON default_cards (name);
-CREATE INDEX idx_default_cards_set_code ON default_cards (set_code);
-CREATE INDEX idx_default_cards_scryfall_id ON default_cards (scryfall_id);
+CREATE INDEX idx_default_cards_set ON default_cards ("set");
+CREATE INDEX idx_default_cards_collector_number ON default_cards (collector_number);
+CREATE INDEX idx_default_cards_oracle_id ON default_cards (oracle_id);
 CREATE INDEX idx_default_cards_tcgplayer_id ON default_cards (tcgplayer_id);
 CREATE INDEX idx_card_prices_card_date ON card_prices (card_id, price_date DESC);
 CREATE INDEX idx_user_cards_user_id ON user_cards (user_id);
 CREATE INDEX idx_user_cards_card_id ON user_cards (card_id);
-CREATE INDEX idx_user_cards_container_id ON user_cards (container_id);
 CREATE INDEX idx_user_cards_for_sale ON user_cards (is_for_sale) WHERE is_for_sale = true;
 CREATE INDEX idx_wishlist_user_id ON wishlist_items (user_id);
 CREATE INDEX idx_transactions_buyer_seller ON transactions (buyer_id, seller_id);
 CREATE INDEX idx_transactions_status ON transactions (status);
 CREATE INDEX idx_messages_conversation ON messages (conversation_id, created_at DESC);
 CREATE INDEX idx_containers_user_id ON containers (user_id);
+CREATE INDEX idx_container_items_user_card_id ON container_items (user_card_id);
+CREATE INDEX idx_container_items_container_id ON container_items (container_id);
 
 -- Row Level Security (RLS) policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE containers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE container_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wishlist_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
@@ -392,6 +336,11 @@ CREATE POLICY "Users can update their own profile" ON profiles FOR UPDATE USING 
 
 CREATE POLICY "Users can view their own containers" ON containers FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can view public containers" ON containers FOR SELECT USING (visibility = 'public');
+
+CREATE POLICY "Users can manage items in their own containers"
+  ON container_items
+  FOR ALL
+  USING (auth.uid() = (SELECT user_id FROM containers WHERE id = container_id));
 
 CREATE POLICY "Users can manage their own cards" ON user_cards FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can view cards for sale" ON user_cards FOR SELECT USING (is_for_sale = true);

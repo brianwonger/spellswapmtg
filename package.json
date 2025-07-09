@@ -16,6 +16,8 @@
     "@radix-ui/react-navigation-menu": "^1.2.13",
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",
+    "@stagewise-plugins/react": "^0.5.0",
+    "@stagewise/toolbar-next": "^0.5.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.50.0",
     "class-variance-authority": "^0.7.1",
