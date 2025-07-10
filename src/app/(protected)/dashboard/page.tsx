@@ -3,6 +3,24 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from '@/components/ui/button'
 import { PlusCircle, TrendingUp, Package, ListChecks } from 'lucide-react'
+import Link from 'next/link'
+
+interface CardWithPrices {
+  quantity: number
+  default_cards: {
+    prices: {
+      usd?: string
+    }
+  }
+}
+
+interface Activity {
+  id: string
+  activity_type: string
+  description: string
+  metadata: any
+  created_at: string
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -15,24 +33,61 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // This would come from your database in a real app
-  const mockStats = {
-    totalCards: 1250,
-    totalValue: 3500.75,
-    recentlyAdded: 15,
-    activeListings: 8
-  }
+  // Get total cards count
+  const { data: totalCardsData, error: totalCardsError } = await supabase
+    .from('user_cards')
+    .select('quantity')
+    .eq('user_id', user.id)
+
+  const totalCards = totalCardsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
+
+  // Get collection value
+  const { data: cardsWithPrices, error: valueError } = await supabase
+    .from('user_cards')
+    .select(`
+      quantity,
+      default_cards (
+        prices
+      )
+    `)
+    .eq('user_id', user.id) as { data: CardWithPrices[] | null, error: any }
+
+  const totalValue = cardsWithPrices?.reduce((sum, card) => {
+    const price = parseFloat(card.default_cards?.prices?.usd || '0')
+    return sum + (price * card.quantity)
+  }, 0) || 0
+
+  // Get recently added cards (last 30 days)
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  const { data: recentCardsData, error: recentError } = await supabase
+    .from('user_cards')
+    .select('quantity')
+    .eq('user_id', user.id)
+    .gte('created_at', thirtyDaysAgo.toISOString())
+
+  const recentlyAdded = recentCardsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
+
+  // Get active listings
+  const { data: activeListingsData, error: listingsError } = await supabase
+    .from('user_cards')
+    .select('quantity')
+    .eq('user_id', user.id)
+    .eq('is_for_sale', true)
+
+  const activeListings = activeListingsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
+
+  // Get recent activities
+  const { data: activities, error: activitiesError } = await supabase
+    .from('user_activities')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(5) as { data: Activity[] | null, error: any }
 
   return (
-    <div className="container space-y-8 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <Button>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Cards
-        </Button>
-      </div>
-      
+    <div className="container py-8">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -40,9 +95,9 @@ export default async function DashboardPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.totalCards}</div>
+            <div className="text-2xl font-bold">{totalCards}</div>
             <p className="text-xs text-muted-foreground">
-              Across all collections
+              Total cards in your collection
             </p>
           </CardContent>
         </Card>
@@ -52,11 +107,9 @@ export default async function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              ${mockStats.totalValue.toLocaleString()}
-            </div>
+            <div className="text-2xl font-bold">${totalValue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              Based on market prices
+              Total value of your collection
             </p>
           </CardContent>
         </Card>
@@ -66,9 +119,9 @@ export default async function DashboardPage() {
             <PlusCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.recentlyAdded}</div>
+            <div className="text-2xl font-bold">{recentlyAdded}</div>
             <p className="text-xs text-muted-foreground">
-              In the last 30 days
+              Cards added in the last 30 days
             </p>
           </CardContent>
         </Card>
@@ -78,42 +131,45 @@ export default async function DashboardPage() {
             <ListChecks className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.activeListings}</div>
+            <div className="text-2xl font-bold">{activeListings}</div>
             <p className="text-xs text-muted-foreground">
-              Cards for sale
+              Cards currently listed for sale
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="mt-8">
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest collection updates</CardDescription>
+            <CardDescription>Your latest actions and updates</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">No recent activity</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <Button variant="outline" className="justify-start">
-              <Package className="mr-2 h-4 w-4" />
-              View Collection
-            </Button>
-            <Button variant="outline" className="justify-start">
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Browse Marketplace
-            </Button>
-            <Button variant="outline" className="justify-start">
-              <ListChecks className="mr-2 h-4 w-4" />
-              Manage Wishlist
-            </Button>
+            {activities && activities.length > 0 ? (
+              <div className="space-y-4">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="flex items-start space-x-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{activity.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(activity.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground mb-4">No recent activity</p>
+                <Link href="/collection/add">
+                  <Button>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Cards
+                  </Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

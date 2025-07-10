@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -9,13 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, ArrowUpDown, Package } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { CollectionContent } from "@/components/collection/collection-content"
 import { CollectionStats } from "@/components/collection/collection-stats"
 import { useEffect, useState } from "react"
 import { UserCard, Container, CardDetails } from '@/lib/types'
+import { FilterDialog, CardFilters } from "@/components/collection/filter-dialog"
 
 interface DatabaseUserCard {
   id: string
@@ -57,6 +59,16 @@ export default function CollectionPage() {
   const [sortBy, setSortBy] = useState("name")
   const [container, setContainer] = useState("all")
   const [availableContainers, setAvailableContainers] = useState<Container[]>([])
+  const [filters, setFilters] = useState<CardFilters>({
+    colors: [],
+    type: null,
+    rarity: null,
+    set: null,
+    minPrice: null,
+    maxPrice: null,
+    condition: null,
+    foil: null
+  })
 
   useEffect(() => {
     async function fetchData() {
@@ -282,6 +294,25 @@ export default function CollectionPage() {
     try {
       setLoading(true)
       const supabase = createClient()
+
+      // Get the current user's ID
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+      if (!user) {
+        setError('You must be logged in to update cards')
+        return false
+      }
+
+      // Get the card details for the activity log
+      const { data: cardData } = await supabase
+        .from('user_cards')
+        .select(`
+          default_cards (
+            name
+          )
+        `)
+        .eq('id', cardId)
+        .single() as { data: { default_cards: { name: string } } | null }
       
       const { error } = await supabase
         .from('user_cards')
@@ -292,6 +323,33 @@ export default function CollectionPage() {
         console.error('Error updating card:', error)
         setError('Failed to update card')
         return false
+      }
+
+      // Record the activity
+      const activityDescription = []
+      if (updates.quantity) activityDescription.push(`quantity to ${updates.quantity}`)
+      if (updates.condition) activityDescription.push(`condition to ${updates.condition}`)
+      if (updates.is_for_sale) activityDescription.push(`listed for sale at $${updates.sale_price}`)
+      else if (updates.is_for_sale === false) activityDescription.push('removed from sale')
+
+      const { error: activityError } = await supabase
+        .from('user_activities')
+        .insert([
+          {
+            user_id: user.id,
+            activity_type: updates.is_for_sale ? 'card_listed' : 'card_updated',
+            description: `Updated ${cardData?.default_cards?.name}: ${activityDescription.join(', ')}`,
+            metadata: {
+              card_id: cardId,
+              card_name: cardData?.default_cards?.name,
+              updates
+            }
+          }
+        ])
+
+      if (activityError) {
+        console.error('Error recording activity:', activityError)
+        // Don't throw here as the main operation succeeded
       }
 
       // Update local state
@@ -425,29 +483,36 @@ export default function CollectionPage() {
                 className="w-full"
               />
             </div>
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="price">Price</SelectItem>
-                <SelectItem value="condition">Condition</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={container} onValueChange={setContainer}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Container..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Containers</SelectItem>
-                {availableContainers.map(container => (
-                  <SelectItem key={container.id} value={container.id}>
-                    {container.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="w-4 h-4 text-muted-foreground" aria-label="Sort" />
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger id="sort-by" className="w-[180px]">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="price">Price</SelectItem>
+                  <SelectItem value="condition">Condition</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-muted-foreground" aria-label="Filter by container" />
+              <Select value={container} onValueChange={setContainer}>
+                <SelectTrigger id="container-filter" className="w-[180px]">
+                  <SelectValue placeholder="Container..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Containers</SelectItem>
+                  {availableContainers.map(container => (
+                    <SelectItem key={container.id} value={container.id}>
+                      {container.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FilterDialog filters={filters} onFiltersChange={setFilters} />
+            </div>
           </div>
           <CollectionContent
             userCards={userCards}
@@ -459,6 +524,7 @@ export default function CollectionPage() {
             onUpdateCard={updateCard}
             availableContainers={availableContainers}
             onUpdateContainerItems={updateCardContainerItems}
+            filters={filters}
           />
         </div>
       </main>

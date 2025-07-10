@@ -33,16 +33,41 @@ export default function AddContainerPage() {
         throw new Error('Not authenticated');
       }
 
-      const { error } = await supabase
+      // Create the container
+      const { data: container, error } = await supabase
         .from('containers')
         .insert([
           {
             ...formData,
             user_id: user.id
           }
-        ]);
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Record the activity
+      const { error: activityError } = await supabase
+        .from('user_activities')
+        .insert([
+          {
+            user_id: user.id,
+            activity_type: 'container_created',
+            description: `Created new ${formData.container_type} container: ${formData.name}`,
+            metadata: {
+              container_id: container.id,
+              container_name: formData.name,
+              container_type: formData.container_type,
+              visibility: formData.visibility
+            }
+          }
+        ]);
+
+      if (activityError) {
+        console.error('Error recording activity:', activityError);
+        // Don't throw here as the main operation succeeded
+      }
 
       router.push('/collection/containers');
       router.refresh();

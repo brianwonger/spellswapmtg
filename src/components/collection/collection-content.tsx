@@ -1,20 +1,21 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ViewMode, ViewToggle } from "../ui/view-toggle"
-import { FilterDialog, CardFilters } from "./filter-dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { UserCard, CardDetails } from '@/lib/types'
 import { EditCardDialog } from "./edit-card-dialog"
 import { Container } from '@/lib/types'
+import { CardFilters } from "./filter-dialog"
 
 interface CollectionContentProps {
   userCards: UserCard[]
   searchTerm?: string
   sortBy?: string
   container?: string
+  filters: CardFilters
   onDeleteCard: (cardId: string) => Promise<boolean>
   onUpdateCardStatus: (cardId: string, updates: { 
     is_for_sale?: boolean
@@ -57,6 +58,7 @@ export function CollectionContent({
   searchTerm = "", 
   sortBy = "name",
   container = "all",
+  filters,
   onDeleteCard,
   onUpdateCardStatus,
   onUpdateCard,
@@ -67,16 +69,14 @@ export function CollectionContent({
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [priceInput, setPriceInput] = useState<string>("")
   const [editingCard, setEditingCard] = useState<UserCard | null>(null)
-  const [filters, setFilters] = useState<CardFilters>({
-    colors: [],
-    type: null,
-    rarity: null,
-    set: null,
-    minPrice: null,
-    maxPrice: null,
-    condition: null,
-    foil: null
-  })
+  const priceInputRef = useRef<HTMLInputElement>(null)
+
+  // Focus management
+  useEffect(() => {
+    if (editingPrice && priceInputRef.current) {
+      priceInputRef.current.focus()
+    }
+  }, [editingPrice, priceInput])
 
   // Apply search filtering
   const searchFilteredCards = userCards.filter(card => {
@@ -148,7 +148,7 @@ export function CollectionContent({
   })
 
   const handleSalePriceUpdate = async (cardId: string) => {
-    const price = parseFloat(priceInput)
+    const price = parseFloat(priceInput.replace(/[^0-9.]/g, ''))
     if (isNaN(price) || price < 0) return
     
     await onUpdateCardStatus(cardId, { 
@@ -158,6 +158,57 @@ export function CollectionContent({
     setEditingPrice(null)
     setPriceInput("")
   }
+
+  const handlePriceInput = (value: string) => {
+    // Remove any non-numeric characters except decimal point
+    const cleaned = value.replace(/[^0-9.]/g, '')
+    
+    // Ensure only one decimal point
+    const parts = cleaned.split('.')
+    if (parts.length > 2) return
+    
+    // Limit to 2 decimal places
+    if (parts[1]?.length > 2) return
+    
+    // Don't allow just a decimal point
+    if (cleaned === '.') return
+    
+    setPriceInput(cleaned)
+    // Ensure input stays focused after state update
+    priceInputRef.current?.focus()
+  }
+
+  const formatPrice = (price: number | null): string => {
+    if (price === null) return ''
+    return price.toFixed(2)
+  }
+
+  const PriceInput = ({ cardId }: { cardId: string }) => (
+    <div className="flex items-center gap-2 mt-2">
+      <Input
+        ref={priceInputRef}
+        type="text"
+        value={priceInput}
+        onChange={(e) => handlePriceInput(e.target.value)}
+        className="w-24"
+        placeholder="0.00"
+        inputMode="decimal"
+        onBlur={() => {
+          // Small delay to allow for button clicks
+          setTimeout(() => {
+            if (document.activeElement?.tagName !== 'BUTTON') {
+              priceInputRef.current?.focus()
+            }
+          }, 10)
+        }}
+      />
+      <Button size="sm" onClick={() => handleSalePriceUpdate(cardId)}>Set</Button>
+      <Button size="sm" variant="ghost" onClick={() => {
+        setEditingPrice(null)
+        setPriceInput("")
+      }}>Cancel</Button>
+    </div>
+  )
 
   const GridView = () => (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -228,21 +279,7 @@ export function CollectionContent({
                     </div>
                   )}
                   {editingPrice === card.id ? (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Input
-                        type="number"
-                        value={priceInput}
-                        onChange={(e) => setPriceInput(e.target.value)}
-                        className="w-24"
-                        min="0"
-                        step="0.01"
-                      />
-                      <Button size="sm" onClick={() => handleSalePriceUpdate(card.id)}>Set</Button>
-                      <Button size="sm" variant="ghost" onClick={() => {
-                        setEditingPrice(null)
-                        setPriceInput("")
-                      }}>Cancel</Button>
-                    </div>
+                    <PriceInput cardId={card.id} />
                   ) : (
                     <Button 
                       size="sm" 
@@ -253,7 +290,7 @@ export function CollectionContent({
                           onUpdateCardStatus(card.id, { is_for_sale: false, sale_price: null })
                         } else {
                           setEditingPrice(card.id)
-                          setPriceInput(Number(cardDetails.prices?.usd || 0).toString())
+                          setPriceInput(formatPrice(Number(cardDetails.prices?.usd || 0)))
                         }
                       }}
                     >
@@ -341,21 +378,7 @@ export function CollectionContent({
                     </div>
                   )}
                   {editingPrice === card.id ? (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Input
-                        type="number"
-                        value={priceInput}
-                        onChange={(e) => setPriceInput(e.target.value)}
-                        className="w-24"
-                        min="0"
-                        step="0.01"
-                      />
-                      <Button size="sm" onClick={() => handleSalePriceUpdate(card.id)}>Set</Button>
-                      <Button size="sm" variant="ghost" onClick={() => {
-                        setEditingPrice(null)
-                        setPriceInput("")
-                      }}>Cancel</Button>
-                    </div>
+                    <PriceInput cardId={card.id} />
                   ) : (
                     <Button 
                       size="sm" 
@@ -366,7 +389,7 @@ export function CollectionContent({
                           onUpdateCardStatus(card.id, { is_for_sale: false, sale_price: null })
                         } else {
                           setEditingPrice(card.id)
-                          setPriceInput(Number(cardDetails.prices?.usd || 0).toString())
+                          setPriceInput(formatPrice(Number(cardDetails.prices?.usd || 0)))
                         }
                       }}
                     >
@@ -392,7 +415,7 @@ export function CollectionContent({
     return (
       <div className="space-y-6">
         <div className="flex justify-end gap-2">
-          <FilterDialog filters={filters} onFiltersChange={setFilters} />
+          {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
           <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
         </div>
         <div className="text-center py-12">
@@ -409,7 +432,7 @@ export function CollectionContent({
     <>
       <div className="flex items-center justify-between mb-6">
         <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
-        <FilterDialog filters={filters} onFiltersChange={setFilters} />
+        {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
       </div>
 
       {viewMode === 'grid' ? <GridView /> : <ListView />}

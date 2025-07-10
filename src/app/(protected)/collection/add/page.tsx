@@ -193,12 +193,59 @@ export default function AddCardsPage() {
         ])
 
       if (containerItemError) throw containerItemError
+
+      // Record the activity
+      const { error: activityError } = await supabase
+        .from('user_activities')
+        .insert([
+          {
+            user_id: user.id,
+            activity_type: 'card_added',
+            description: `Added ${quantity}x ${selectedCard.name} to collection`,
+            metadata: {
+              card_id: selectedCard.id,
+              card_name: selectedCard.name,
+              quantity,
+              condition,
+              container_id: containerId
+            }
+          }
+        ])
+
+      if (activityError) {
+        console.error('Error recording activity:', activityError)
+        // Don't throw here as the main operation succeeded
+      }
       
       toast.success(`Added ${quantity}x ${selectedCard.name} to collection`)
       setSelectedCard(null)
     } catch (error) {
       console.error('Error adding card to collection:', error)
-      toast.error('Failed to add card to collection')
+      let errorMessage = 'Failed to add card to collection'
+      
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle Supabase error object which might have code and message properties
+        const err = error as { code?: string; message?: string; details?: string }
+        
+        // Check for unique constraint violation
+        if (err.code === '23505') { // PostgreSQL unique violation code
+          errorMessage = `You already have this card in your collection with the same condition (${condition}). Try updating the existing entry instead.`
+        } else {
+          if (err.message) {
+            errorMessage += `: ${err.message}`
+          }
+          if (err.code) {
+            errorMessage += ` (Code: ${err.code})`
+          }
+          if (err.details) {
+            errorMessage += ` - ${err.details}`
+          }
+        }
+      }
+      
+      toast.error(errorMessage)
     }
   }
 
