@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,20 @@ import { Label } from "@/components/ui/label"
 import { MapPin, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import L from 'leaflet'
+
+// Fix for default marker icons in Leaflet
+const icon = L.icon({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
 type Coordinates = {
   latitude: number;
@@ -40,7 +54,13 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
   })
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [mapKey, setMapKey] = useState(0) // Force map re-render when coordinates change
   const supabase = createClient()
+
+  // Update map when coordinates change
+  useEffect(() => {
+    setMapKey(prev => prev + 1)
+  }, [coordinates])
 
   const updateLocation = async () => {
     setIsUpdatingLocation(true)
@@ -156,10 +176,30 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
             </Button>
           </div>
           {coordinates && (
-            <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              Coordinates: {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
-            </div>
+            <>
+              <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                Coordinates: {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
+              </div>
+              <div className="h-[300px] w-full rounded-md overflow-hidden mt-2" key={mapKey}>
+                <MapContainer
+                  center={[coordinates.latitude, coordinates.longitude]}
+                  zoom={13}
+                  scrollWheelZoom={false}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[coordinates.latitude, coordinates.longitude]} icon={icon}>
+                    <Popup>
+                      {locationName || 'Your Location'}
+                    </Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
+            </>
           )}
           {!coordinates && profile.location_coordinates && (
             <div className="text-sm text-destructive mt-1">
