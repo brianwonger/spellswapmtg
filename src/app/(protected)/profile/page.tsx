@@ -1,72 +1,184 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { MapPin, Star, Shield, Settings } from "lucide-react"
+import { Star, Shield } from "lucide-react"
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
+import { UserInfoCard } from "@/components/user-info-card"
 
-// Mock data for initial development
-const mockProfile = {
-  username: "MTGCollector",
-  email: "user@example.com",
-  location: "New York, NY",
-  joinDate: "January 2024",
-  rating: 4.8,
-  totalReviews: 25,
-  completedTrades: 42,
-  tradingPreferences: {
-    meetupPreferred: true,
-    shippingAvailable: true,
-    preferredLocation: "Local Card Shop",
-    minCardValue: 5,
-  },
+type UserRating = {
+  total_reviews: number
+  average_rating: number
+  recommend_count: number
 }
 
-export default function ProfilePage() {
+type Profile = {
+  username: string
+  display_name: string | null
+  email: string
+  location_name: string | null
+  location_coordinates: string | null
+  location_lat: number | null
+  location_lng: number | null
+  created_at: string
+  user_ratings: UserRating | null
+}
+
+type DatabaseProfile = {
+  id: string
+  username: string
+  display_name: string | null
+  email: string
+  location_name: string | null
+  location_coordinates: string | null
+  location_lat: number | null
+  location_lng: number | null
+  created_at: string
+  user_ratings: UserRating[] | null
+}
+
+export default async function ProfilePage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  // Fetch profile data
+  let profileData: DatabaseProfile | null = null;
+  
+  const { data: existingProfile, error } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      username,
+      display_name,
+      email,
+      location_name,
+      location_coordinates,
+      created_at,
+      user_ratings (
+        total_reviews,
+        average_rating,
+        recommend_count
+      )
+    `)
+    .eq("id", user.id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching profile:", error);
+    return (
+      <div className="container py-8">
+        <div className="bg-destructive/15 text-destructive p-4 rounded-md">
+          <h2 className="font-semibold">Error loading profile</h2>
+          <p className="text-sm mt-1">Please try refreshing the page. If the problem persists, contact support.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If coordinates exist, fetch them separately using raw SQL
+  let coordinates = null;
+  if (existingProfile?.location_coordinates) {
+    console.log('Attempting to get coordinates for:', existingProfile.location_coordinates);
+    const { data: coordData, error: coordError } = await supabase
+      .rpc('get_coordinates', { 
+        point: existingProfile.location_coordinates.toString()
+      });
+    
+    if (coordError) {
+      console.error('Error getting coordinates:', coordError);
+    } else {
+      console.log('Coordinate data:', coordData);
+      if (coordData && coordData.length > 0) {
+        coordinates = {
+          lat: coordData[0].lat,
+          lng: coordData[0].lng
+        };
+        console.log('Parsed coordinates:', coordinates);
+      }
+    }
+  }
+
+  if (!existingProfile) {
+    // Create a default profile if none exists
+    const defaultProfile: Omit<DatabaseProfile, 'user_ratings'> = {
+      id: user.id,
+      username: user.email?.split("@")[0] || "user",
+      display_name: null,
+      email: user.email || "",
+      location_name: null,
+      location_coordinates: null,
+      location_lat: null,
+      location_lng: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data: newProfile, error: createError } = await supabase
+      .from("profiles")
+      .insert([defaultProfile])
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("Error creating profile:", createError);
+      return (
+        <div className="container py-8">
+          <div className="bg-destructive/15 text-destructive p-4 rounded-md">
+            <h2 className="font-semibold">Error creating profile</h2>
+            <p className="text-sm mt-1">Please try refreshing the page. If the problem persists, contact support.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!newProfile) {
+      throw new Error("Failed to create profile");
+    }
+
+    profileData = {
+      ...newProfile,
+      location_lat: null,
+      location_lng: null
+    };
+  } else {
+    profileData = {
+      ...existingProfile,
+      location_lat: coordinates?.lat ?? null,
+      location_lng: coordinates?.lng ?? null
+    };
+  }
+
+  // Transform the data to match our type
+  if (!profileData) {
+    throw new Error("Failed to load profile data");
+  }
+
+  const typedProfile: Profile = {
+    username: profileData.username,
+    display_name: profileData.display_name,
+    email: profileData.email,
+    location_name: profileData.location_name,
+    location_coordinates: profileData.location_coordinates,
+    location_lat: profileData.location_lat,
+    location_lng: profileData.location_lng,
+    created_at: profileData.created_at,
+    user_ratings: profileData.user_ratings?.[0] || null
+  };
+
   return (
     <div className="container py-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Profile</h1>
-        <Button variant="outline">
-          <Settings className="h-4 w-4 mr-2" />
-          Edit Profile
-        </Button>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* User Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>User Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Username</Label>
-              <Input value={mockProfile.username} readOnly />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={mockProfile.email} readOnly />
-            </div>
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>{mockProfile.location}</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Member Since</Label>
-              <div>{mockProfile.joinDate}</div>
-            </div>
-          </CardContent>
-        </Card>
+        <UserInfoCard profile={typedProfile} />
 
         {/* Trading Stats */}
         <Card>
@@ -76,73 +188,14 @@ export default function ProfilePage() {
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">
               <Star className="h-4 w-4 text-yellow-500" />
-              <span className="font-medium">{mockProfile.rating}</span>
+              <span className="font-medium">{typedProfile.user_ratings?.average_rating.toFixed(1) || "No ratings"}</span>
               <span className="text-muted-foreground">
-                ({mockProfile.totalReviews} reviews)
+                ({typedProfile.user_ratings?.total_reviews || 0} reviews)
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-green-500" />
-              <span>{mockProfile.completedTrades} successful trades</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Trading Preferences */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Trading Preferences</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Preferred Meeting Location</Label>
-                <Select defaultValue={mockProfile.tradingPreferences.preferredLocation}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Local Card Shop">Local Card Shop</SelectItem>
-                    <SelectItem value="Coffee Shop">Coffee Shop</SelectItem>
-                    <SelectItem value="Library">Library</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Minimum Card Value</Label>
-                <Select defaultValue={mockProfile.tradingPreferences.minCardValue.toString()}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">$1</SelectItem>
-                    <SelectItem value="5">$5</SelectItem>
-                    <SelectItem value="10">$10</SelectItem>
-                    <SelectItem value="20">$20</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Trading Methods</Label>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={mockProfile.tradingPreferences.meetupPreferred}
-                      readOnly
-                    />
-                    <span>In-person meetup</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={mockProfile.tradingPreferences.shippingAvailable}
-                      readOnly
-                    />
-                    <span>Shipping available</span>
-                  </div>
-                </div>
-              </div>
+              <span>{typedProfile.user_ratings?.recommend_count || 0} successful trades</span>
             </div>
           </CardContent>
         </Card>

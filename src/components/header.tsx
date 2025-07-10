@@ -1,3 +1,5 @@
+'use client'
+
 import Link from "next/link"
 import { MainNav } from "@/components/navigation-menu"
 import { Button } from "@/components/ui/button"
@@ -12,8 +14,37 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Mail } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useEffect, useState } from "react"
+
+type Profile = {
+  username: string
+  email: string
+}
 
 export function Header() {
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const supabase = createClient()
+
+  useEffect(() => {
+    async function getProfile() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('username, email')
+          .eq('id', user.id)
+          .single()
+        
+        if (data) {
+          setProfile(data)
+        }
+      }
+    }
+
+    getProfile()
+  }, [])
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
@@ -33,17 +64,17 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/avatars/01.png" alt="User" />
-                  <AvatarFallback>U</AvatarFallback>
+                  <AvatarImage src="/avatars/01.png" alt={profile?.username || 'User'} />
+                  <AvatarFallback>{profile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">User</p>
+                  <p className="text-sm font-medium leading-none">{profile?.username || 'Loading...'}</p>
                   <p className="text-xs leading-none text-muted-foreground">
-                    user@example.com
+                    {profile?.email || 'Loading...'}
                   </p>
                 </div>
               </DropdownMenuLabel>
@@ -51,8 +82,8 @@ export function Header() {
               <DropdownMenuItem asChild>
                 <Link href="/profile">Profile</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/settings">Settings</Link>
+              <DropdownMenuItem disabled className="cursor-not-allowed opacity-50">
+                Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
