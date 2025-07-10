@@ -14,7 +14,6 @@ import { Search, Plus, ArrowUpDown, Package } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { CollectionContent } from "@/components/collection/collection-content"
-import { CollectionStats } from "@/components/collection/collection-stats"
 import { useEffect, useState } from "react"
 import { UserCard, Container, CardDetails } from '@/lib/types'
 import { FilterDialog, CardFilters } from "@/components/collection/filter-dialog"
@@ -437,12 +436,6 @@ export default function CollectionPage() {
     return <div className="container py-8 text-red-500">Error: {error}</div>
   }
 
-  // Calculate collection statistics
-  const totalCards = userCards.reduce((sum, card) => sum + card.quantity, 0)
-  const uniqueCards = userCards.length
-  const totalValue = calculateTotalValue(userCards)
-  const averageValue = uniqueCards > 0 ? totalValue / uniqueCards : 0
-
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
@@ -466,13 +459,7 @@ export default function CollectionPage() {
         </div>
       </header>
       <main className="flex-1 p-4 md:p-6">
-        <CollectionStats
-          totalCards={totalCards}
-          uniqueCards={uniqueCards}
-          totalValue={totalValue}
-          averageValue={averageValue}
-        />
-        <div className="flex flex-col gap-4 pt-6">
+        <div className="flex flex-col gap-4">
           <div className="flex gap-4">
             <div className="flex-1">
               <Input

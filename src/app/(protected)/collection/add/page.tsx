@@ -195,26 +195,49 @@ export default function AddCardsPage() {
       if (containerItemError) throw containerItemError
 
       // Record the activity
-      const { error: activityError } = await supabase
-        .from('user_activities')
-        .insert([
-          {
-            user_id: user.id,
-            activity_type: 'card_added',
-            description: `Added ${quantity}x ${selectedCard.name} to collection`,
-            metadata: {
-              card_id: selectedCard.id,
-              card_name: selectedCard.name,
-              quantity,
-              condition,
-              container_id: containerId
-            }
-          }
-        ])
+      try {
+        const activityMetadata = {
+          card_id: selectedCard.id,
+          card_name: selectedCard.name,
+          quantity,
+          condition,
+          container_id: containerId
+        }
 
-      if (activityError) {
-        console.error('Error recording activity:', activityError)
-        // Don't throw here as the main operation succeeded
+        // Validate metadata before inserting
+        const validMetadata = Object.entries(activityMetadata).reduce((acc, [key, value]) => {
+          if (value !== null && value !== undefined) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, any>);
+
+        const { error: activityError } = await supabase
+          .from('user_activities')
+          .insert([
+            {
+              user_id: user.id,
+              activity_type: 'card_added',
+              description: `Added ${quantity}x ${selectedCard.name} to collection`,
+              metadata: Object.keys(validMetadata).length > 0 ? validMetadata : null
+            }
+          ])
+
+        if (activityError) {
+          // Log the error with more context
+          console.error('Error recording activity:', {
+            error: activityError,
+            metadata: validMetadata,
+            userId: user.id,
+            cardName: selectedCard.name
+          })
+          // Show a warning toast but don't block the success message
+          toast.warning('Card added but failed to record activity')
+        }
+      } catch (activityError) {
+        // Handle any unexpected errors in activity recording
+        console.error('Unexpected error recording activity:', activityError)
+        toast.warning('Card added but failed to record activity')
       }
       
       toast.success(`Added ${quantity}x ${selectedCard.name} to collection`)

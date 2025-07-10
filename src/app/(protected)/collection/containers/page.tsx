@@ -167,9 +167,9 @@ function DeleteDialog({ container, hasCards, open, onOpenChange, onConfirm }: De
           <DialogDescription>
             Are you sure you want to delete "{container?.name}"?
             {hasCards && (
-              <p className="mt-2 text-yellow-600">
+              <span className="mt-2 text-yellow-600 block">
                 Warning: This container has cards in it. Deleting it will move all cards to your "Unorganized Cards" container.
-              </p>
+              </span>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -267,6 +267,12 @@ export default function ContainersPage() {
     if (!deletingContainer) return;
 
     try {
+      // Get the current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+
       // First, find the default container
       const { data: defaultContainer, error: defaultError } = await supabase
         .from('containers')
@@ -274,16 +280,69 @@ export default function ContainersPage() {
         .eq('is_default', true)
         .single();
 
-      if (defaultError) throw defaultError;
+      if (defaultError) {
+        console.error('Error finding default container:', defaultError);
+        throw new Error('Could not find default container');
+      }
 
-      // Move cards to default container
+      // Move cards to default container if needed
       if (containerCardCounts[deletingContainer.id] > 0) {
-        const { error: updateError } = await supabase
+        // First, get all container items for this container
+        const { data: containerItems, error: itemsError } = await supabase
           .from('container_items')
-          .update({ container_id: defaultContainer.id })
+          .select('*')
           .eq('container_id', deletingContainer.id);
 
-        if (updateError) throw updateError;
+        if (itemsError) {
+          console.error('Error fetching container items:', itemsError);
+          throw new Error('Failed to fetch container items');
+        }
+
+        // Check for existing items in default container
+        const { data: existingItems, error: existingError } = await supabase
+          .from('container_items')
+          .select('user_card_id, quantity')
+          .eq('container_id', defaultContainer.id)
+          .in('user_card_id', containerItems?.map(item => item.user_card_id) || []);
+
+        if (existingError) {
+          console.error('Error checking existing items:', existingError);
+          throw new Error('Failed to check existing items');
+        }
+
+        // Prepare upsert data
+        const upsertData = containerItems?.map(item => {
+          const existing = existingItems?.find(e => e.user_card_id === item.user_card_id);
+          return {
+            container_id: defaultContainer.id,
+            user_card_id: item.user_card_id,
+            quantity: (existing?.quantity || 0) + item.quantity
+          };
+        }) || [];
+
+        // Delete existing items in default container that we'll update
+        if (existingItems?.length) {
+          const { error: deleteError } = await supabase
+            .from('container_items')
+            .delete()
+            .eq('container_id', defaultContainer.id)
+            .in('user_card_id', existingItems.map(item => item.user_card_id));
+
+          if (deleteError) {
+            console.error('Error deleting existing items:', deleteError);
+            throw new Error('Failed to update existing items');
+          }
+        }
+
+        // Insert new items into default container
+        const { error: insertError } = await supabase
+          .from('container_items')
+          .insert(upsertData);
+
+        if (insertError) {
+          console.error('Error inserting items:', insertError);
+          throw new Error('Failed to move cards to default container');
+        }
       }
 
       // Delete the container
@@ -292,10 +351,37 @@ export default function ContainersPage() {
         .delete()
         .eq('id', deletingContainer.id);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error('Error deleting container:', deleteError);
+        throw new Error('Failed to delete container');
+      }
+
+      // Record the activity
+      const { error: activityError } = await supabase
+        .from('user_activities')
+        .insert([
+          {
+            user_id: user.id,
+            activity_type: 'container_deleted',
+            description: `Deleted ${deletingContainer.container_type} container: ${deletingContainer.name}`,
+            metadata: {
+              container_id: deletingContainer.id,
+              container_name: deletingContainer.name,
+              container_type: deletingContainer.container_type,
+              had_cards: containerCardCounts[deletingContainer.id] > 0,
+              cards_moved_to: containerCardCounts[deletingContainer.id] > 0 ? defaultContainer.id : null
+            }
+          }
+        ]);
+
+      if (activityError) {
+        console.error('Error recording activity:', activityError);
+        // Don't throw here as the main operation succeeded
+      }
 
       setContainers(containers.filter(c => c.id !== deletingContainer.id));
     } catch (err) {
+      console.error('Container deletion error:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete container');
     }
   };

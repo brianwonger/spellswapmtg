@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from '@/components/ui/button'
-import { PlusCircle, TrendingUp, Package, ListChecks } from 'lucide-react'
+import { PlusCircle, TrendingUp, Package, ListChecks, Library, Star, DollarSign } from 'lucide-react'
 import Link from 'next/link'
 
 interface CardWithPrices {
@@ -41,6 +41,12 @@ export default async function DashboardPage() {
 
   const totalCards = totalCardsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
 
+  // Get unique cards count
+  const { count: uniqueCards, error: uniqueCardsError } = await supabase
+    .from('user_cards')
+    .select('*', { count: 'exact' })
+    .eq('user_id', user.id)
+
   // Get collection value
   const { data: cardsWithPrices, error: valueError } = await supabase
     .from('user_cards')
@@ -56,6 +62,9 @@ export default async function DashboardPage() {
     const price = parseFloat(card.default_cards?.prices?.usd || '0')
     return sum + (price * card.quantity)
   }, 0) || 0
+
+  // Calculate average value per card
+  const averageValue = totalCards > 0 ? totalValue / totalCards : 0
 
   // Get recently added cards (last 30 days)
   const thirtyDaysAgo = new Date()
@@ -92,27 +101,64 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Cards</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Library className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalCards}</div>
+            <div className="text-2xl font-bold">{totalCards.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Total cards in your collection
+              Cards in your collection
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Collection Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Unique Cards</CardTitle>
+            <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{uniqueCards?.toLocaleString() || '0'}</div>
             <p className="text-xs text-muted-foreground">
-              Total value of your collection
+              Different cards owned
             </p>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${totalValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Collection market value
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Average Value</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${averageValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Per card average
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Recently Added</CardTitle>
