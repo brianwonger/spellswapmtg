@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, ArrowLeft, Minus, Plus } from "lucide-react"
+import { Search, ArrowLeft, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { Toaster, toast } from 'sonner'
 import {
@@ -44,6 +44,8 @@ const CONDITIONS = [
   "poor"
 ] as const
 
+const ITEMS_PER_PAGE = 20
+
 const CONDITION_LABELS: Record<typeof CONDITIONS[number], string> = {
   mint: "Mint",
   near_mint: "Near Mint",
@@ -77,38 +79,65 @@ const getCardImageUrl = (imageUris: string | null | undefined): string => {
 export default function AddCardsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Card[]>([])
+  const [totalResults, setTotalResults] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [condition, setCondition] = useState<typeof CONDITIONS[number]>("near_mint")
   const supabase = createClient()
 
-  const handleSearch = async () => {
+  const handleSearch = async (page = 1) => {
     if (!searchQuery.trim()) return
+
+    const cleanedQuery = searchQuery.trim().split(/\s+/).join(' & ')
 
     setIsLoading(true)
     try {
+      // First get the total count
+      const { count, error: countError } = await supabase
+        .from('default_cards')
+        .select('id', { count: 'exact', head: true })
+        .textSearch('fts', cleanedQuery)
+
+      if (countError) throw countError
+
+      // Then get the paginated results
       const { data, error } = await supabase
         .from('default_cards')
         .select('id, name, type_line, oracle_text, flavor_text, image_uris, set_name')
-        .or(`name.ilike.%${searchQuery}%,type_line.ilike.%${searchQuery}%,oracle_text.ilike.%${searchQuery}%,flavor_text.ilike.%${searchQuery}%`)
-        .limit(20)
+        .textSearch('fts', cleanedQuery)
+        .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1)
 
       if (error) throw error
       
-      // Log the first result to debug
-      if (data && data.length > 0) {
-        console.log('First card data:', JSON.stringify(data[0], null, 2))
-      }
-      
       setSearchResults(data || [])
+      setTotalResults(count || 0)
+      setCurrentPage(page)
     } catch (error) {
       console.error('Error searching cards:', error)
-      toast.error('Failed to search cards')
+      let errorMessage = 'Failed to search cards'
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`
+      } else if (typeof error === 'object' && error !== null) {
+        const err = error as { code?: string; message?: string; details?: string }
+        if (err.message) {
+          errorMessage += `: ${err.message}`
+        }
+      }
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
   }
+
+  const handlePageChange = (newPage: number) => {
+    handleSearch(newPage)
+  }
+
+  const totalPages = Math.ceil(totalResults / ITEMS_PER_PAGE)
+  const startRange = ((currentPage - 1) * ITEMS_PER_PAGE) + 1
+  const endRange = Math.min(currentPage * ITEMS_PER_PAGE, totalResults)
 
   const openAddModal = (card: Card) => {
     setSelectedCard(card)
@@ -275,13 +304,18 @@ export default function AddCardsPage() {
   return (
     <>
       <div className="container py-8 space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href="/collection">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/collection">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold">Add Cards to Collection</h1>
+          </div>
+          <Link href="/collection/import">
+            <Button>Import</Button>
           </Link>
-          <h1 className="text-3xl font-bold">Add Cards to Collection</h1>
         </div>
 
         <div className="flex gap-2">
@@ -292,13 +326,19 @@ export default function AddCardsPage() {
               className="pl-8"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch(1)}
             />
           </div>
-          <Button onClick={handleSearch} disabled={isLoading}>
+          <Button onClick={() => handleSearch(1)} disabled={isLoading}>
             {isLoading ? 'Searching...' : 'Search'}
           </Button>
         </div>
+
+        {searchResults.length > 0 && (
+          <div className="text-sm text-muted-foreground">
+            Showing cards {startRange}-{endRange} out of {totalResults} results
+          </div>
+        )}
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {searchResults.map((card) => (
@@ -328,6 +368,30 @@ export default function AddCardsPage() {
             </Card>
           ))}
         </div>
+
+        {searchResults.length > 0 && (
+          <div className="flex justify-center items-center gap-4 mt-6">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog open={!!selectedCard} onOpenChange={(open: boolean) => !open && setSelectedCard(null)}>

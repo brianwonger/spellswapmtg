@@ -419,3 +419,49 @@ CREATE TRIGGER create_default_container_trigger
   AFTER INSERT ON profiles
   FOR EACH ROW
   EXECUTE FUNCTION create_default_container();
+
+-- Create the increment_card_quantity function
+CREATE OR REPLACE FUNCTION increment_card_quantity(
+    p_card_id UUID,
+    p_user_id UUID,
+    p_condition card_condition,
+    p_foil BOOLEAN,
+    p_language card_language,
+    p_quantity_to_add INT
+)
+RETURNS VOID AS $$
+DECLARE
+    v_user_card_id UUID;
+    v_container_id UUID;
+BEGIN
+    -- Find the corresponding user_card and its container
+    SELECT uc.id, ci.container_id
+    INTO v_user_card_id, v_container_id
+    FROM user_cards uc
+    JOIN container_items ci ON uc.id = ci.user_card_id
+    WHERE uc.card_id = p_card_id
+      AND uc.user_id = p_user_id
+      AND uc.condition = p_condition
+      AND uc.foil = p_foil
+      AND uc.language = p_language
+    LIMIT 1;
+
+    -- If a matching card is found, increment its quantity
+    IF v_user_card_id IS NOT NULL THEN
+        -- Increment quantity in user_cards
+        UPDATE user_cards
+        SET quantity = quantity + p_quantity_to_add
+        WHERE id = v_user_card_id;
+
+        -- Also increment quantity in container_items
+        UPDATE container_items
+        SET quantity = quantity + p_quantity_to_add
+        WHERE user_card_id = v_user_card_id AND container_id = v_container_id;
+    ELSE
+        RAISE EXCEPTION 'No existing card found to increment for user_id: %, card_id: %', p_user_id, p_card_id;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "authenticated";
