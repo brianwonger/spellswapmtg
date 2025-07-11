@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -8,52 +7,77 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Filter, Star, StarHalf, StarOff } from "lucide-react"
+import { Search, Filter } from "lucide-react"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
+import { WishlistItem } from "@/lib/types"
+import { WishlistCard } from "@/components/wishlist-card"
 
-// Mock data for initial development
-const mockWishlist = [
-  {
-    id: 1,
-    name: "Volcanic Island",
-    set: "Revised",
-    priority: "high",
-    maxPrice: 800,
-    currentPrice: 850,
-    imageUrl: "https://placehold.co/300x400",
-    availableNearby: 2,
-  },
-  {
-    id: 2,
-    name: "Force of Will",
-    set: "Alliances",
-    priority: "medium",
-    maxPrice: 120,
-    currentPrice: 110,
-    imageUrl: "https://placehold.co/300x400",
-    availableNearby: 5,
-  },
-  // Add more mock wishlist items as needed
-]
-
-const PriorityIcon = ({ priority }: { priority: string }) => {
-  switch (priority) {
-    case "high":
-      return <Star className="h-4 w-4 text-yellow-500" />
-    case "medium":
-      return <StarHalf className="h-4 w-4 text-yellow-500" />
-    case "low":
-      return <StarOff className="h-4 w-4 text-muted-foreground" />
-    default:
-      return null
+async function getWishlistItems(): Promise<WishlistItem[]> {
+  const supabase = await createClient()
+  
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  
+  if (userError || !user) {
+    return []
   }
+
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .select(`
+      id,
+      priority,
+      max_price,
+      preferred_condition,
+      foil_preference,
+      notes,
+      created_at,
+      default_cards!inner (
+        id,
+        name,
+        type_line,
+        oracle_text,
+        flavor_text,
+        image_uris,
+        set_name,
+        prices,
+        rarity,
+        set
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching wishlist:', error)
+    return []
+  }
+
+  // Transform the data to match our interface
+  return (data || []).map(item => ({
+    id: item.id,
+    priority: item.priority,
+    max_price: item.max_price,
+    preferred_condition: item.preferred_condition,
+    foil_preference: item.foil_preference,
+    notes: item.notes,
+    created_at: item.created_at,
+    default_cards: Array.isArray(item.default_cards) ? item.default_cards[0] : item.default_cards
+  }))
 }
 
-export default function WishlistPage() {
+
+
+export default async function WishlistPage() {
+  const wishlistItems = await getWishlistItems()
+
   return (
     <div className="container py-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Wishlist</h1>
-        <Button>Add to Wishlist</Button>
+        <Link href="/wishlist/add">
+          <Button>Add to Wishlist</Button>
+        </Link>
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
@@ -69,7 +93,7 @@ export default function WishlistPage() {
             <SelectContent>
               <SelectItem value="priority">Priority</SelectItem>
               <SelectItem value="price">Current Price</SelectItem>
-              <SelectItem value="availability">Availability</SelectItem>
+              <SelectItem value="date">Date Added</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="icon">
@@ -78,60 +102,20 @@ export default function WishlistPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {mockWishlist.map((item) => (
-          <Card key={item.id} className="overflow-hidden">
-            <div className="aspect-[3/4] relative">
-              <img
-                src={item.imageUrl}
-                alt={item.name}
-                className="object-cover w-full h-full"
-              />
-              <div className="absolute top-2 right-2 bg-background/90 p-1 rounded-full">
-                <PriorityIcon priority={item.priority} />
-              </div>
-            </div>
-            <CardHeader>
-              <CardTitle className="text-lg">{item.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                <div className="text-sm text-muted-foreground">
-                  {item.set}
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="text-sm">Max Price:</div>
-                  <div className="font-medium">
-                    ${item.maxPrice.toLocaleString()}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="text-sm">Current Price:</div>
-                  <div className={`font-medium ${
-                    item.currentPrice > item.maxPrice 
-                      ? "text-red-500" 
-                      : "text-green-500"
-                  }`}>
-                    ${item.currentPrice.toLocaleString()}
-                  </div>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {item.availableNearby} available nearby
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  disabled={item.currentPrice > item.maxPrice}
-                >
-                  {item.currentPrice > item.maxPrice 
-                    ? "Above Max Price" 
-                    : "Find Sellers"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {wishlistItems.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Your wishlist is empty</p>
+          <Link href="/wishlist/add">
+            <Button className="mt-4">Add your first card</Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {wishlistItems.map((item) => (
+            <WishlistCard key={item.id} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   )
 } 

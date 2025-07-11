@@ -14,6 +14,18 @@ interface CardWithPrices {
   }
 }
 
+interface MostValuableCard {
+  card_name: string
+  quantity: number
+  total_value: number
+  default_cards: {
+    name: string
+    prices: {
+      usd?: string
+    }
+  }
+}
+
 interface Activity {
   id: string
   activity_type: string
@@ -86,6 +98,30 @@ export default async function DashboardPage() {
     .eq('is_for_sale', true)
 
   const activeListings = activeListingsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
+
+  // Get top 5 most valuable cards
+  const { data: mostValuableCards, error: mostValuableError } = await supabase
+    .from('user_cards')
+    .select(`
+      quantity,
+      default_cards (
+        name,
+        prices
+      )
+    `)
+    .eq('user_id', user.id)
+    .not('default_cards', 'is', null) as { data: MostValuableCard[] | null, error: any }
+
+  // Calculate and sort by individual card price
+  const topCards = mostValuableCards
+    ?.map(card => ({
+      name: card.default_cards.name,
+      quantity: card.quantity,
+      price: parseFloat(card.default_cards.prices?.usd || '0'),
+      total_value: card.quantity * parseFloat(card.default_cards.prices?.usd || '0')
+    }))
+    .sort((a, b) => b.price - a.price) // Sort by individual price instead of total value
+    .slice(0, 5) || []
 
   // Get recent activities
   const { data: activities, error: activitiesError } = await supabase
@@ -181,6 +217,44 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               Cards currently listed for sale
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Most Valuable Cards */}
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Most Valuable Cards</CardTitle>
+            <CardDescription>Top 5 cards by market price in your collection</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topCards.length > 0 ? (
+              <div className="space-y-4">
+                {topCards.map((card, index) => (
+                  <div key={index} className="flex items-center justify-between border-b last:border-0 pb-2 last:pb-0">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{card.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Market price: ${card.price.toFixed(2)} • Qty: {card.quantity}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">
+                        ${card.price.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground">No cards found</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

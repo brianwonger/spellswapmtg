@@ -39,4 +39,15 @@ export interface Container {
   name: string
   container_type: string
   is_default: boolean
+}
+
+export interface WishlistItem {
+  id: string
+  priority: string
+  max_price: number | null
+  preferred_condition: string
+  foil_preference: string
+  notes: string | null
+  created_at: string
+  default_cards: CardDetails
 } 
