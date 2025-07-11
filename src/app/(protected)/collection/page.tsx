@@ -328,7 +328,7 @@ export default function CollectionPage() {
       const activityDescription = []
       if (updates.quantity) activityDescription.push(`quantity to ${updates.quantity}`)
       if (updates.condition) activityDescription.push(`condition to ${updates.condition}`)
-      if (updates.is_for_sale) activityDescription.push(`listed for sale at $${updates.sale_price}`)
+      if (updates.is_for_sale) activityDescription.push(`listed for sale at $${updates.sale_price?.toFixed(2) || '0.00'}`)
       else if (updates.is_for_sale === false) activityDescription.push('removed from sale')
 
       const { error: activityError } = await supabase
@@ -341,7 +341,10 @@ export default function CollectionPage() {
             metadata: {
               card_id: cardId,
               card_name: cardData?.default_cards?.name,
-              updates
+              updates: {
+                ...updates,
+                sale_price: updates.is_for_sale ? (updates.sale_price ?? 0) : null
+              }
             }
           }
         ])

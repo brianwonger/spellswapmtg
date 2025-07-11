@@ -53,6 +53,17 @@ const getCardImageUrl = (imageUris: string | null): string => {
   }
 }
 
+const getInitialViewMode = (): ViewMode => {
+  if (typeof window === 'undefined') return 'grid'
+  return (localStorage.getItem('collectionViewMode') as ViewMode) || 'grid'
+}
+
+const saveViewMode = (mode: ViewMode) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('collectionViewMode', mode)
+  }
+}
+
 export function CollectionContent({ 
   userCards, 
   searchTerm = "", 
@@ -65,7 +76,7 @@ export function CollectionContent({
   availableContainers,
   onUpdateContainerItems
 }: CollectionContentProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode())
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [priceInput, setPriceInput] = useState<string>("")
   const [editingCard, setEditingCard] = useState<UserCard | null>(null)
@@ -180,7 +191,7 @@ export function CollectionContent({
 
   const formatPrice = (price: number | null): string => {
     if (price === null) return ''
-    return price.toFixed(2)
+    return `$${price.toFixed(2)}`
   }
 
   const PriceInput = ({ cardId }: { cardId: string }) => (
@@ -270,12 +281,12 @@ export function CollectionContent({
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm text-muted-foreground">Market Price:</span>
-                    <span className="font-medium">${Number(cardDetails.prices?.usd || 0).toLocaleString()}</span>
+                    <span className="font-medium">{formatPrice(Number(cardDetails.prices?.usd || 0))}</span>
                   </div>
                   {card.is_for_sale && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm text-muted-foreground">Sale Price:</span>
-                      <span className="font-medium text-green-600">${(card.sale_price || 0).toLocaleString()}</span>
+                      <span className="font-medium text-green-600">{formatPrice(card.sale_price || 0)}</span>
                     </div>
                   )}
                   {editingPrice === card.id ? (
@@ -312,103 +323,123 @@ export function CollectionContent({
   )
 
   const ListView = () => (
-    <div className="space-y-4">
-      {sortedCards?.map((card) => {
-        const cardDetails = card.default_cards
-        const imageUrl = getCardImageUrl(cardDetails.image_uris)
-        const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left py-2 px-3">Name</th>
+            <th className="text-left py-2 px-3">Set</th>
+            <th className="text-center py-2 px-3">Qty</th>
+            <th className="text-left py-2 px-3">Condition</th>
+            <th className="text-right py-2 px-3">Market Price</th>
+            <th className="text-right py-2 px-3">Sale Price</th>
+            <th className="text-center py-2 px-3">Sale Status</th>
+            <th className="text-center py-2 px-3 w-[120px]">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedCards?.map((card) => {
+            const cardDetails = card.default_cards
+            const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
 
-        return (
-          <Card key={card.id}>
-            <div className="flex p-4 gap-4">
-              <div className="w-[100px] flex-shrink-0 relative">
-                <img
-                  src={imageUrl}
-                  alt={cardDetails.name}
-                  className="w-full h-auto rounded"
-                  loading="lazy"
-                />
-                {card.is_for_sale && (
-                  <div className="absolute top-0 left-0 bg-green-500/80 text-white px-3 py-1 rounded-br-lg font-medium">
-                    For Sale
+            return (
+              <tr key={card.id} className="border-b hover:bg-muted/50">
+                <td className="py-2 px-3">
+                  <div>
+                    <div className="font-medium">{cardDetails.name}</div>
+                    {card.foil && <span className="text-sm text-muted-foreground">Foil</span>}
+                    {card.notes && (
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {card.notes}
+                      </div>
+                    )}
                   </div>
-                )}
-                <button
-                  onClick={async () => {
-                    if (window.confirm('Are you sure you want to remove this card from your collection?')) {
-                      await onDeleteCard(card.id)
-                    }
-                  }}
-                  className="absolute top-1 right-1 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                  title="Remove card"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18"></path>
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setEditingCard(card)}
-                  className="absolute top-1 right-12 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                  title="Edit card"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                    <path d="m15 5 4 4"></path>
-                  </svg>
-                </button>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold">{cardDetails.name}</h3>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {cardDetails.set_name} • {card.condition.replace('_', ' ')}
-                  {card.foil && ' • Foil'}
-                  {card.quantity > 1 && ` • Qty: ${card.quantity}`}
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm text-muted-foreground">Market Price:</span>
-                    <span className="font-medium">${Number(cardDetails.prices?.usd || 0).toLocaleString()}</span>
-                  </div>
-                  {card.is_for_sale && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm text-muted-foreground">Sale Price:</span>
-                      <span className="font-medium text-green-600">${(card.sale_price || 0).toLocaleString()}</span>
+                </td>
+                <td className="py-2 px-3">{cardDetails.set_name}</td>
+                <td className="text-center py-2 px-3">{card.quantity}</td>
+                <td className="py-2 px-3">{card.condition.replace('_', ' ')}</td>
+                <td className="text-right py-2 px-3">{formatPrice(Number(cardDetails.prices?.usd || 0))}</td>
+                <td className="text-right py-2 px-3">
+                  {card.is_for_sale ? (
+                    <span className="text-green-600">{formatPrice(card.sale_price || 0)}</span>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td className="py-2 px-3">
+                  {editingPrice === card.id ? (
+                    <div className="flex justify-center">
+                      <PriceInput cardId={card.id} />
+                    </div>
+                  ) : (
+                    <div className="flex justify-center">
+                      <Button 
+                        size="sm" 
+                        variant={card.is_for_sale ? "default" : "outline"}
+                        onClick={() => {
+                          if (card.is_for_sale) {
+                            onUpdateCardStatus(card.id, { is_for_sale: false, sale_price: null })
+                          } else {
+                            setEditingPrice(card.id)
+                            setPriceInput(formatPrice(Number(cardDetails.prices?.usd || 0)))
+                          }
+                        }}
+                      >
+                        {card.is_for_sale ? "Remove from Sale" : "Mark for Sale"}
+                      </Button>
                     </div>
                   )}
-                  {editingPrice === card.id ? (
-                    <PriceInput cardId={card.id} />
-                  ) : (
-                    <Button 
-                      size="sm" 
-                      variant={card.is_for_sale ? "default" : "outline"}
-                      className="mt-2"
-                      onClick={() => {
-                        if (card.is_for_sale) {
-                          onUpdateCardStatus(card.id, { is_for_sale: false, sale_price: null })
-                        } else {
-                          setEditingPrice(card.id)
-                          setPriceInput(formatPrice(Number(cardDetails.prices?.usd || 0)))
-                        }
-                      }}
-                    >
-                      {card.is_for_sale ? "Remove from Sale" : "Mark for Sale"}
-                    </Button>
-                  )}
-                </div>
-                {card.notes && (
-                  <div className="text-sm text-muted-foreground mt-2">
-                    {card.notes}
+                </td>
+                <td className="py-2 px-3">
+                  <div className="flex justify-center items-center gap-1">
+                    <div className="w-[55px] flex justify-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingCard(card)}
+                        title="Edit card"
+                        className="h-8 w-8"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                          <path d="m15 5 4 4"></path>
+                        </svg>
+                      </Button>
+                    </div>
+                    <div className="w-[55px] flex justify-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to remove this card from your collection?')) {
+                            await onDeleteCard(card.id)
+                          }
+                        }}
+                        title="Remove card"
+                        className="h-8 w-8"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18"></path>
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                        </svg>
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </Card>
-        )
-      })}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
+
+  // Update ViewToggle usage to save preference
+  const handleViewChange = (newMode: ViewMode) => {
+    setViewMode(newMode)
+    saveViewMode(newMode)
+  }
 
   // Show message when no cards match search/filters
   if (sortedCards.length === 0 && (searchTerm.trim() || Object.values(filters).some(v => v !== null && v !== ""))) {
@@ -416,7 +447,7 @@ export function CollectionContent({
       <div className="space-y-6">
         <div className="flex justify-end gap-2">
           {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
-          <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
+          <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
         </div>
         <div className="text-center py-12">
           <h3 className="text-lg font-medium text-muted-foreground">No cards found</h3>
@@ -431,7 +462,7 @@ export function CollectionContent({
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
+        <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
         {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
       </div>
 
