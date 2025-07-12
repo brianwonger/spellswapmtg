@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, ArrowLeft } from 'lucide-react';
+import { Plus, ArrowLeft, FolderUp } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 interface Container {
   id: string;
@@ -203,6 +204,7 @@ export default function ContainersPage() {
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
   const [deletingContainer, setDeletingContainer] = useState<Container | null>(null);
   const [containerCardCounts, setContainerCardCounts] = useState<Record<string, number>>({});
+  const [groupingOrphans, setGroupingOrphans] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -386,6 +388,113 @@ export default function ContainersPage() {
     }
   };
 
+  async function handleGroupOrphans() {
+    try {
+      setGroupingOrphans(true);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('Not authenticated');
+
+      // Get or create default container
+      let defaultContainerId: string;
+      const { data: existingContainer, error: defaultContainerError } = await supabase
+        .from('containers')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_default', true)
+        .single();
+
+      if (defaultContainerError) {
+        if (defaultContainerError.code === 'PGRST116') {
+          // Create default container if it doesn't exist
+          const { data: newContainer, error: createError } = await supabase
+            .from('containers')
+            .insert([{
+              user_id: user.id,
+              name: 'Unorganized Cards',
+              container_type: 'custom',
+              description: 'Default container for unorganized cards',
+              visibility: 'private',
+              is_default: true
+            }])
+            .select('id')
+            .single();
+
+          if (createError) {
+            throw new Error(`Failed to create default container: ${createError.message}`);
+          }
+          if (!newContainer) {
+            throw new Error('Failed to create default container: No data returned');
+          }
+          defaultContainerId = newContainer.id;
+        } else {
+          throw new Error(`Failed to fetch default container: ${defaultContainerError.message}`);
+        }
+      } else {
+        if (!existingContainer) {
+          throw new Error('Failed to fetch default container: No data returned');
+        }
+        defaultContainerId = existingContainer.id;
+      }
+
+      // First get all container items to build exclusion list
+      const { data: containerItems, error: containerItemsError } = await supabase
+        .from('container_items')
+        .select('user_card_id')
+        .not('user_card_id', 'is', null);
+
+      if (containerItemsError) {
+        throw new Error(`Failed to fetch container items: ${containerItemsError.message}`);
+      }
+
+      // Get all user's cards that are not in any container
+      const { data: orphanedCards, error: orphanedError } = await supabase
+        .from('user_cards')
+        .select('id, quantity')
+        .eq('user_id', user.id);
+
+      if (orphanedError) {
+        throw new Error(`Failed to fetch user cards: ${orphanedError.message}`);
+      }
+      if (!orphanedCards) {
+        throw new Error('Failed to fetch user cards: No data returned');
+      }
+
+      // Filter out cards that are already in containers
+      const containerCardIds = new Set(containerItems?.map(item => item.user_card_id) || []);
+      const trulyOrphanedCards = orphanedCards.filter(card => !containerCardIds.has(card.id));
+
+      if (trulyOrphanedCards.length === 0) {
+        toast.info('No orphaned cards found.');
+        return;
+      }
+
+      // Add orphaned cards to default container
+      const { error: insertError } = await supabase
+        .from('container_items')
+        .insert(
+          trulyOrphanedCards.map(card => ({
+            container_id: defaultContainerId,
+            user_card_id: card.id,
+            quantity: card.quantity
+          }))
+        );
+
+      if (insertError) {
+        throw new Error(`Failed to insert orphaned cards: ${insertError.message}`);
+      }
+
+      // Refresh container counts
+      await fetchContainers();
+      toast.success(`Successfully grouped ${trulyOrphanedCards.length} orphaned cards.`);
+    } catch (err) {
+      console.error('Error grouping orphaned cards:', err);
+      toast.error(err instanceof Error ? err.message : 'An unexpected error occurred');
+    } finally {
+      setGroupingOrphans(false);
+    }
+  }
+
   if (loading) {
     return <div className="p-8">Loading containers...</div>;
   }
@@ -407,12 +516,22 @@ export default function ContainersPage() {
         
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Manage Containers</h1>
-          <Link href="/collection/containers/add">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Container
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={handleGroupOrphans}
+              disabled={groupingOrphans}
+            >
+              <FolderUp className="w-4 h-4 mr-2" />
+              {groupingOrphans ? 'Grouping...' : 'Group Orphaned Cards'}
             </Button>
-          </Link>
+            <Link href="/collection/containers/add">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Container
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
