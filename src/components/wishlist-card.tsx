@@ -60,6 +60,10 @@ function getCurrentPrice(prices: any): number {
   return priceValues.length > 0 ? parseFloat(priceValues[0] as string) : 0
 }
 
+function formatPrice(price: number): string {
+  return price % 1 === 0 ? `$${price}` : `$${price.toFixed(2)}`
+}
+
 export function WishlistCard({ item, onPriorityUpdate }: WishlistCardProps) {
   const [priority, setPriority] = useState(item.priority)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -151,19 +155,19 @@ export function WishlistCard({ item, onPriorityUpdate }: WishlistCardProps) {
             <div className="flex justify-between items-center">
               <div className="text-sm">Max Price:</div>
               <div className="font-medium">
-                ${maxPrice.toLocaleString()}
+                {formatPrice(maxPrice)}
               </div>
             </div>
           )}
           {currentPrice > 0 && (
             <div className="flex justify-between items-center">
-              <div className="text-sm">Current Price:</div>
+              <div className="text-sm">Market Price:</div>
               <div className={`font-medium ${
                 maxPrice > 0 && currentPrice > maxPrice 
                   ? "text-red-500" 
                   : "text-green-500"
               }`}>
-                ${currentPrice.toLocaleString()}
+                {formatPrice(currentPrice)}
               </div>
             </div>
           )}
