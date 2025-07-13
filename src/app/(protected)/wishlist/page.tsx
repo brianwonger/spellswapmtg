@@ -9,13 +9,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, ArrowUpDown } from "lucide-react"
+import { Search, ArrowUpDown, Pen } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { WishlistItem } from "@/lib/types"
 import { WishlistCard } from "@/components/wishlist-card"
 import { useState, useEffect } from "react"
 import { FilterDialog, WishlistFilters } from "@/components/wishlist/filter-dialog"
+import { ViewMode, ViewToggle } from "@/components/ui/view-toggle"
+import { EditWishlistDialog } from "@/components/wishlist/edit-wishlist-dialog"
+
+const getInitialViewMode = (): ViewMode => {
+  if (typeof window === 'undefined') return 'grid'
+  return (localStorage.getItem('wishlistViewMode') as ViewMode) || 'grid'
+}
+
+const saveViewMode = (mode: ViewMode) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('wishlistViewMode', mode)
+  }
+}
 
 async function getWishlistItems(): Promise<WishlistItem[]> {
   const supabase = createClient()
@@ -75,6 +88,8 @@ export default function WishlistPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode())
+  const [editingItem, setEditingItem] = useState<WishlistItem | null>(null)
   const [activeFilters, setActiveFilters] = useState<WishlistFilters>({
     cardType: "all",
     rarity: "all",
@@ -219,6 +234,78 @@ export default function WishlistPage() {
     return sortDirection === 'asc' ? comparison : -comparison
   })
 
+  const handleViewChange = (newMode: ViewMode) => {
+    setViewMode(newMode)
+    saveViewMode(newMode)
+  }
+
+  const handleUpdateWishlistItem = (updatedItem: WishlistItem) => {
+    setWishlistItems(prev => 
+      prev.map(item => 
+        item.id === updatedItem.id ? updatedItem : item
+      )
+    )
+  }
+
+  const GridView = () => (
+    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {sortedAndFilteredItems.map((item) => (
+        <div key={item.id} className="relative group">
+          <WishlistCard item={item} />
+          <button
+            onClick={() => setEditingItem(item)}
+            className="absolute top-17 right-2 p-2 bg-background/90 hover:bg-background rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Pen className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+
+  const ListView = () => (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left p-3">Card Name</th>
+            <th className="text-left p-3">Set</th>
+            <th className="text-left p-3">Priority</th>
+            <th className="text-left p-3">Market Price</th>
+            <th className="text-left p-3">Max Price</th>
+            <th className="text-left p-3">Condition</th>
+            <th className="text-left p-3">Foil</th>
+            <th className="text-left p-3">Added</th>
+            <th className="text-left p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedAndFilteredItems.map((item) => (
+            <tr key={item.id} className="border-b hover:bg-muted/50">
+              <td className="p-3">{item.default_cards.name}</td>
+              <td className="p-3">{item.default_cards.set_name}</td>
+              <td className="p-3 capitalize">{item.priority || 'N/A'}</td>
+              <td className="p-3">${parseFloat(item.default_cards.prices?.usd || '0').toFixed(2)}</td>
+              <td className="p-3">{item.max_price ? `$${item.max_price.toFixed(2)}` : 'N/A'}</td>
+              <td className="p-3 capitalize">{item.preferred_condition?.replace('_', ' ') || 'Any'}</td>
+              <td className="p-3">{item.foil_preference || 'Any'}</td>
+              <td className="p-3">{new Date(item.created_at).toLocaleDateString()}</td>
+              <td className="p-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setEditingItem(item)}
+                >
+                  <Pen className="h-4 w-4" />
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
   if (loading) {
     return <div className="container py-8">Loading...</div>
   }
@@ -243,6 +330,7 @@ export default function WishlistPage() {
           />
         </div>
         <div className="flex gap-2">
+          <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
           <div className="flex items-center gap-2">
             <Button 
               variant="ghost" 
@@ -286,11 +374,18 @@ export default function WishlistPage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {sortedAndFilteredItems.map((item) => (
-            <WishlistCard key={item.id} item={item} />
-          ))}
-        </div>
+        viewMode === 'grid' ? <GridView /> : <ListView />
+      )}
+
+      {editingItem && (
+        <EditWishlistDialog
+          item={editingItem}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setEditingItem(null)
+          }}
+          onUpdate={handleUpdateWishlistItem}
+        />
       )}
     </div>
   )
