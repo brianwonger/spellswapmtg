@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { MainNav } from "@/components/navigation-menu"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Mail } from "lucide-react"
+import { Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState } from "react"
 
@@ -53,10 +52,6 @@ export function Header() {
         </Link>
         <MainNav />
         <div className="flex items-center ml-auto space-x-4">
-          <div className="w-full md:w-[300px] relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search cards..." className="pl-8" />
-          </div>
           <Link href="/messages" className="text-muted-foreground hover:text-foreground transition-colors">
             <Mail className="h-5 w-5" />
           </Link>

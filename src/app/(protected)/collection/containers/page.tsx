@@ -22,6 +22,23 @@ interface Container {
   updated_at: string;
 }
 
+interface ContainerItemWithUserCard {
+  id: string;
+  user_card_id: string;
+  quantity: number;
+  user_cards: {
+    id: string;
+    card_id: string;
+    default_cards: {
+      prices: {
+        usd: string | null;
+        usd_foil: string | null;
+      };
+    };
+    foil: boolean;
+  };
+}
+
 interface EditDialogProps {
   container: Container | null;
   open: boolean;
@@ -197,6 +214,73 @@ function DeleteDialog({ container, hasCards, open, onOpenChange, onConfirm }: De
   );
 }
 
+interface MarkForSaleDialogProps {
+  container: Container | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (percentage: number) => Promise<void>;
+}
+
+function MarkForSaleDialog({ container, open, onOpenChange, onConfirm }: MarkForSaleDialogProps) {
+  const [percentage, setPercentage] = useState(80);
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    await onConfirm(percentage);
+    setLoading(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mark Cards for Sale</DialogTitle>
+          <DialogDescription>
+            Set all cards in "{container?.name}" for sale at a percentage of their market value.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="percentage">Percentage of Market Value</Label>
+            <div className="flex items-center space-x-2">
+              <Input
+                id="percentage"
+                type="number"
+                min={1}
+                max={200}
+                value={percentage}
+                onChange={(e) => setPercentage(Number(e.target.value))}
+                className="w-24"
+              />
+              <span>%</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            disabled={loading}
+          >
+            {loading ? 'Processing...' : 'Mark for Sale'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ContainersPage() {
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,6 +289,7 @@ export default function ContainersPage() {
   const [deletingContainer, setDeletingContainer] = useState<Container | null>(null);
   const [containerCardCounts, setContainerCardCounts] = useState<Record<string, number>>({});
   const [groupingOrphans, setGroupingOrphans] = useState(false);
+  const [markingForSaleContainer, setMarkingForSaleContainer] = useState<Container | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -495,6 +580,154 @@ export default function ContainersPage() {
     }
   }
 
+  const handleMarkForSale = async (percentage: number) => {
+    if (!markingForSaleContainer) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // First, get all cards in the container
+      const { data: containerItems, error: itemsError } = await supabase
+        .from('container_items')
+        .select(`
+          id,
+          user_card_id,
+          quantity,
+          user_cards!inner (
+            id,
+            card_id,
+            foil,
+            default_cards!inner (
+              prices
+            )
+          )
+        `)
+        .eq('container_id', markingForSaleContainer.id) as {
+          data: ContainerItemWithUserCard[] | null;
+          error: any;
+        };
+
+      if (itemsError) {
+        console.error('Error fetching container items:', itemsError);
+        throw itemsError;
+      }
+
+      if (!containerItems?.length) {
+        toast.info('No cards found in this container');
+        return;
+      }
+
+      // For each card, update its for_sale status and price
+      const updates = containerItems.map(async (item) => {
+        try {
+          const userCard = item.user_cards;
+          if (!userCard?.default_cards?.prices) {
+            console.error(`No price data found for container item ${item.id}`);
+            return false;
+          }
+
+          // Get the appropriate price based on whether the card is foil or not
+          const priceStr = userCard.foil ? 
+            userCard.default_cards.prices.usd_foil : 
+            userCard.default_cards.prices.usd;
+
+          if (!priceStr) {
+            console.error(`No ${userCard.foil ? 'foil' : 'regular'} price found for card in container item ${item.id}`);
+            return false;
+          }
+
+          const marketValue = parseFloat(priceStr);
+          const salePrice = (marketValue * percentage) / 100;
+
+          // Update the user_card's for_sale status and price
+          const { error: updateError } = await supabase
+            .from('user_cards')
+            .update({
+              is_for_sale: true,
+              sale_price: salePrice
+            })
+            .eq('id', item.user_card_id);
+
+          if (updateError) {
+            console.error(`Error updating user card ${item.user_card_id}:`, updateError);
+            return false;
+          }
+
+          return true;
+        } catch (err) {
+          console.error(`Error processing container item ${item.id}:`, err);
+          return false;
+        }
+      });
+
+      // Wait for all updates to complete
+      const results = await Promise.all(updates);
+      const successCount = results.filter(Boolean).length;
+      const failureCount = results.length - successCount;
+
+      if (failureCount === 0) {
+        toast.success(`Successfully marked ${successCount} cards for sale`);
+      } else if (successCount === 0) {
+        toast.error('Failed to mark any cards for sale');
+      } else {
+        toast.warning(`Marked ${successCount} cards for sale, ${failureCount} failed`);
+      }
+
+    } catch (err) {
+      console.error('Error in handleMarkForSale:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to mark cards for sale');
+    }
+  };
+
+  const handleUnmarkForSale = async (container: Container) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // First, get all cards in the container
+      const { data: containerItems, error: itemsError } = await supabase
+        .from('container_items')
+        .select(`
+          id,
+          user_card_id,
+          user_cards!inner (
+            id
+          )
+        `)
+        .eq('container_id', container.id);
+
+      if (itemsError) {
+        console.error('Error fetching container items:', itemsError);
+        throw itemsError;
+      }
+
+      if (!containerItems?.length) {
+        toast.info('No cards found in this container');
+        return;
+      }
+
+      // Update all user cards to not be for sale
+      const { error: updateError } = await supabase
+        .from('user_cards')
+        .update({
+          is_for_sale: false,
+          sale_price: null
+        })
+        .in('id', containerItems.map(item => item.user_card_id));
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      toast.success(`Successfully unmarked ${containerItems.length} cards from sale`);
+
+    } catch (err) {
+      console.error('Error in handleUnmarkForSale:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to unmark cards from sale');
+    }
+  };
+
   if (loading) {
     return <div className="p-8">Loading containers...</div>;
   }
@@ -564,6 +797,20 @@ export default function ContainersPage() {
                 >
                   Delete
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMarkingForSaleContainer(container)}
+                >
+                  Mark for Sale
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleUnmarkForSale(container)}
+                >
+                  Unmark
+                </Button>
               </div>
             </div>
             <div className="mt-4 text-sm text-gray-500">
@@ -586,6 +833,13 @@ export default function ContainersPage() {
         open={!!deletingContainer}
         onOpenChange={(open) => !open && setDeletingContainer(null)}
         onConfirm={handleDelete}
+      />
+
+      <MarkForSaleDialog
+        container={markingForSaleContainer}
+        open={!!markingForSaleContainer}
+        onOpenChange={(open) => !open && setMarkingForSaleContainer(null)}
+        onConfirm={handleMarkForSale}
       />
     </div>
   );
