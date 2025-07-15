@@ -43,13 +43,21 @@ export default function SignupPage() {
       })
 
       // Add detailed logging for debugging
-      console.log('Supabase signUp response:', { data, error })
+      console.log('Supabase signUp response:', {
+        data,
+        error: error ? {
+          name: error.name,
+          message: error.message,
+          status: error.status,
+          stack: error.stack
+        } : null
+      })
 
       if (error) {
         if (error.message && error.message.toLowerCase().includes('user already registered')) {
           setSignupError('This email is already registered. Please log in or use a different email.')
         } else {
-          setSignupError(error.message || 'An error occurred during signup. Please try again.')
+          setSignupError(`Error: ${error.message} (${error.status})`)
         }
         return
       }
@@ -59,8 +67,13 @@ export default function SignupPage() {
         setSignupError(null)
       }
     } catch (error: any) {
-      setSignupError(error.message || 'Unexpected error during signup. Please try again.')
-      console.error('Unexpected error during signup:', error)
+      const errorMessage = error.message || 'Unexpected error during signup'
+      console.error('Signup error details:', {
+        message: errorMessage,
+        error: error,
+        stack: error.stack
+      })
+      setSignupError(`Error: ${errorMessage}`)
     }
   }
   

@@ -64,6 +64,19 @@ const saveViewMode = (mode: ViewMode) => {
   }
 }
 
+const getCardQuantity = (card: UserCard, selectedContainer: string) => {
+  if (selectedContainer === "all") {
+    // For "All Containers", show total quantity across all containers
+    return card.quantity
+  } else {
+    // For specific container, show quantity in that container
+    const containerItem = card.container_items?.find(item => 
+      item.container_id === selectedContainer
+    )
+    return containerItem?.quantity || 0
+  }
+}
+
 export function CollectionContent({ 
   userCards, 
   searchTerm = "", 
@@ -93,8 +106,10 @@ export function CollectionContent({
   const searchFilteredCards = userCards.filter(card => {
     // First apply container filter
     if (container !== "all") {
-      const containerItem = card.container_items?.[0]
-      if (!containerItem || containerItem.container_id !== container) {
+      const hasContainer = card.container_items?.some(item => 
+        item.container_id === container && item.quantity > 0
+      )
+      if (!hasContainer) {
         return false
       }
     }
@@ -227,6 +242,7 @@ export function CollectionContent({
         const cardDetails = card.default_cards
         const imageUrl = getCardImageUrl(cardDetails.image_uris)
         const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
+        const quantity = getCardQuantity(card, container)
 
         return (
           <Card key={card.id} className="overflow-hidden">
@@ -276,7 +292,7 @@ export function CollectionContent({
                 <div className="text-sm text-muted-foreground">
                   {cardDetails.set_name} • {card.condition.replace('_', ' ')}
                   {card.foil && ' • Foil'}
-                  {card.quantity > 1 && ` • Qty: ${card.quantity}`}
+                  {quantity > 1 && ` • Qty: ${quantity}`}
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
@@ -341,6 +357,7 @@ export function CollectionContent({
           {sortedCards?.map((card) => {
             const cardDetails = card.default_cards
             const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
+            const quantity = getCardQuantity(card, container)
 
             return (
               <tr key={card.id} className="border-b hover:bg-muted/50">
@@ -356,7 +373,7 @@ export function CollectionContent({
                   </div>
                 </td>
                 <td className="py-2 px-3">{cardDetails.set_name}</td>
-                <td className="text-center py-2 px-3">{card.quantity}</td>
+                <td className="text-center py-2 px-3">{quantity}</td>
                 <td className="py-2 px-3">{card.condition.replace('_', ' ')}</td>
                 <td className="text-right py-2 px-3">{formatPrice(Number(cardDetails.prices?.usd || 0))}</td>
                 <td className="text-right py-2 px-3">

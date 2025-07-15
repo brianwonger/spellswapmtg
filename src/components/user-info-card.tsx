@@ -8,20 +8,27 @@ import { Label } from "@/components/ui/label"
 import { MapPin, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 
-// Fix for default marker icons in Leaflet
-const icon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// Dynamically import map components with no SSR
+const MapContainer = dynamic(
+  () => import('react-leaflet').then(mod => mod.MapContainer),
+  { ssr: false }
+)
+const TileLayer = dynamic(
+  () => import('react-leaflet').then(mod => mod.TileLayer),
+  { ssr: false }
+)
+const Marker = dynamic(
+  () => import('react-leaflet').then(mod => mod.Marker),
+  { ssr: false }
+)
+const Popup = dynamic(
+  () => import('react-leaflet').then(mod => mod.Popup),
+  { ssr: false }
+)
 
 type Coordinates = {
   latitude: number;
@@ -54,8 +61,22 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
   })
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [mapKey, setMapKey] = useState(0) // Force map re-render when coordinates change
+  const [mapKey, setMapKey] = useState(0)
+  const [markerIcon, setMarkerIcon] = useState<L.Icon | null>(null)
   const supabase = createClient()
+
+  // Initialize Leaflet icon on client side
+  useEffect(() => {
+    setMarkerIcon(L.icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    }))
+  }, [])
 
   // Update map when coordinates change
   useEffect(() => {
@@ -175,7 +196,7 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
               )}
             </Button>
           </div>
-          {coordinates && (
+          {coordinates && markerIcon && (
             <>
               <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
@@ -192,7 +213,7 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <Marker position={[coordinates.latitude, coordinates.longitude]} icon={icon}>
+                  <Marker position={[coordinates.latitude, coordinates.longitude]} icon={markerIcon}>
                     <Popup>
                       {locationName || 'Your Location'}
                     </Popup>
