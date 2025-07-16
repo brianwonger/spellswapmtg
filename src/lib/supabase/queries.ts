@@ -1,16 +1,26 @@
 
-import { createClient } from "./server";
+import { createClient } from "./client";
 import { MarketplaceListing } from "../types";
 
-export async function getMarketplaceListings(): Promise<MarketplaceListing[]> {
-  const supabase = await createClient();
+interface MarketplaceFilters {
+  colors?: string[];
+  manaCosts?: string[];
+  format?: string;
+  setName?: string;
+  rarity?: string[];
+  priceRange?: {
+    min?: string;
+    max?: string;
+  };
+}
+
+export async function getMarketplaceListings(filters?: MarketplaceFilters): Promise<MarketplaceListing[]> {
+  const supabase = createClient();
   
   // Get current user
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  console.log('Current user:', user?.id);
 
   // Build the base query
   let query = supabase
@@ -26,7 +36,11 @@ export async function getMarketplaceListings(): Promise<MarketplaceListing[]> {
         id,
         name,
         set_name,
-        image_uris
+        image_uris,
+        colors,
+        cmc,
+        rarity,
+        legalities
       ),
       profiles (
         id,
@@ -41,6 +55,49 @@ export async function getMarketplaceListings(): Promise<MarketplaceListing[]> {
     query = query.neq('user_id', user.id);
   }
 
+  // Apply filters if provided
+  if (filters) {
+    // Filter by colors
+    if (filters.colors && filters.colors.length > 0) {
+      query = query.contains('default_cards.colors', filters.colors);
+    }
+
+    // Filter by mana cost
+    if (filters.manaCosts && filters.manaCosts.length > 0) {
+      const maxCost = Math.max(...filters.manaCosts.map(cost => cost === '6+' ? 6 : parseInt(cost)));
+      if (maxCost === 6) {
+        query = query.gte('default_cards.cmc', 6);
+      } else {
+        query = query.in('default_cards.cmc', filters.manaCosts.map(cost => parseInt(cost)));
+      }
+    }
+
+    // Filter by format
+    if (filters.format) {
+      query = query.eq(`default_cards.legalities->>${filters.format.toLowerCase()}`, 'legal');
+    }
+
+    // Filter by set name
+    if (filters.setName) {
+      query = query.ilike('default_cards.set_name', `%${filters.setName}%`);
+    }
+
+    // Filter by rarity
+    if (filters.rarity && filters.rarity.length > 0) {
+      query = query.in('default_cards.rarity', filters.rarity.map(r => r.toLowerCase()));
+    }
+
+    // Filter by price range
+    if (filters.priceRange) {
+      if (filters.priceRange.min) {
+        query = query.gte('sale_price', parseFloat(filters.priceRange.min));
+      }
+      if (filters.priceRange.max) {
+        query = query.lte('sale_price', parseFloat(filters.priceRange.max));
+      }
+    }
+  }
+
   const { data, error } = await query;
 
   if (error) {
@@ -49,17 +106,6 @@ export async function getMarketplaceListings(): Promise<MarketplaceListing[]> {
       console.error('This might be an RLS issue - check if you have the correct policies in place');
     }
     return [];
-  }
-
-  console.log('Found listings:', data?.length || 0);
-  if (data?.length > 0) {
-    console.log('Sample listing:', {
-      id: data[0].id,
-      user_id: data[0].user_id,
-      has_profile: !!data[0].profiles,
-      has_card_details: !!data[0].default_cards,
-      image_uris: data[0].default_cards?.image_uris
-    });
   }
 
   const listings: MarketplaceListing[] = data
@@ -84,7 +130,7 @@ export async function getMarketplaceListings(): Promise<MarketplaceListing[]> {
         price: listing.sale_price,
         seller: listing.profiles.display_name,
         location: listing.profiles.location_name,
-        imageUrl: imageUris?.normal || imageUris?.large || null // Use null instead of empty string as fallback
+        imageUrl: imageUris?.normal || imageUris?.large || null
       };
     });
 
