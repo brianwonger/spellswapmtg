@@ -9,106 +9,74 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, Filter, MapPin } from "lucide-react"
+import { getMarketplaceListings } from "@/lib/supabase/queries"
+import { MarketplaceListing } from "@/lib/types"
+import Image from "next/image"
 
-// Mock data for initial development
-const mockListings = [
-  {
-    id: 1,
-    name: "Jace, the Mind Sculptor",
-    set: "Worldwake",
-    condition: "Near Mint",
-    price: 120,
-    seller: "MTGDealer123",
-    location: "New York, NY",
-    distance: 2.5,
-    imageUrl: "https://placehold.co/300x400",
-  },
-  {
-    id: 2,
-    name: "Tarmogoyf",
-    set: "Future Sight",
-    condition: "Lightly Played",
-    price: 80,
-    seller: "CardCollector",
-    location: "Brooklyn, NY",
-    distance: 4.8,
-    imageUrl: "https://placehold.co/300x400",
-  },
-  // Add more mock listings as needed
-]
+const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
-export default function MarketplacePage() {
+export default async function MarketplacePage() {
+  const listings: MarketplaceListing[] = await getMarketplaceListings()
+
   return (
     <div className="container py-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Marketplace</h1>
-        <Button>List Cards for Sale</Button>
+        <Button>
+          <Filter className="w-4 h-4 mr-2" />
+          Filter
+        </Button>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search listings..." className="pl-8" />
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <Input
+            type="search"
+            placeholder="Search cards..."
+            className="w-full"
+          />
         </div>
-        <div className="flex gap-2">
-          <Select defaultValue="distance">
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="distance">Distance</SelectItem>
-              <SelectItem value="price-low">Price: Low to High</SelectItem>
-              <SelectItem value="price-high">Price: High to Low</SelectItem>
-              <SelectItem value="condition">Condition</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="25">
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Distance" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">Within 10 miles</SelectItem>
-              <SelectItem value="25">Within 25 miles</SelectItem>
-              <SelectItem value="50">Within 50 miles</SelectItem>
-              <SelectItem value="100">Within 100 miles</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
-        </div>
+        <Select defaultValue="all">
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="standard">Standard</SelectItem>
+            <SelectItem value="modern">Modern</SelectItem>
+            <SelectItem value="commander">Commander</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {mockListings.map((listing) => (
+        {listings.map((listing) => (
           <Card key={listing.id} className="overflow-hidden">
             <div className="aspect-[3/4] relative">
-              <img
-                src={listing.imageUrl}
+              <Image
+                src={listing.imageUrl || FALLBACK_CARD_IMAGE}
                 alt={listing.name}
-                className="object-cover w-full h-full"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               />
             </div>
-            <CardHeader>
-              <CardTitle className="text-lg">{listing.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                <div className="text-sm text-muted-foreground">
-                  {listing.set} • {listing.condition}
-                </div>
-                <div className="font-medium text-lg">
-                  ${listing.price.toLocaleString()}
-                </div>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {listing.location} ({listing.distance} miles)
-                </div>
+            <CardContent className="p-4">
+              <h3 className="font-semibold">{listing.name}</h3>
+              <p className="text-sm text-gray-500">{listing.set}</p>
+              <div className="mt-2 flex items-center justify-between">
                 <div className="text-sm">
-                  Seller: {listing.seller}
+                  <span className="font-medium">${listing.price}</span> ·{" "}
+                  <span className="text-gray-500">{listing.condition}</span>
                 </div>
-                <Button className="w-full">Contact Seller</Button>
+                <div className="flex items-center text-sm text-gray-500">
+                  <MapPin className="w-4 h-4 mr-1" />
+                  {listing.location || "Unknown"}
+                </div>
               </div>
+              <p className="mt-2 text-sm text-gray-500">
+                Seller: {listing.seller}
+              </p>
             </CardContent>
           </Card>
         ))}

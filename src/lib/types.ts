@@ -50,4 +50,16 @@ export interface WishlistItem {
   notes: string | null
   created_at: string
   default_cards: CardDetails
+}
+
+export interface MarketplaceListing {
+  id: string;
+  name: string;
+  set: string;
+  condition: string;
+  price: number | null;
+  seller: string;
+  location: string | null;
+  imageUrl: string;
+  distance?: number;
 } 
