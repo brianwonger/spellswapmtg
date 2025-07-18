@@ -1,0 +1,84 @@
+# Frontend Application Development Prompt: SpellSwap
+
+I need to develop a frontend application with the following specifications:
+
+## Pages Required:
+* **Landing Page** – Introduction to SpellSwap with value propositions and sign-up/login options
+* **Authentication Pages** – Sign up, login, and password reset forms
+* **Dashboard/Home** – User analytics dashboard with collection stats, recent activity, and quick actions
+* **Collection Management** – Main collection overview with container management and card browsing
+* **Container Management** – Create, edit, and organize containers (decks, binders, custom containers)
+* **Import Cards** – Upload CSV files or manually add cards to collection
+* **Card Lookup** – Search and browse MTG card database with detailed card information
+* **Marketplace** – Buy/sell interface with location-based card listings and filters
+* **Market - Buy Cards** – Browse available cards for purchase with distance and filters
+* **Market - Sell Cards** – List personal cards for sale with pricing and condition settings
+* **Wishlist** – Manage wanted cards with priority levels and price tracking
+* **Messages** – Conversation list and chat interface for trade coordination
+* **User Profile** – Personal information, trading preferences, and user ratings
+* **Legal/Terms** – Terms of service and liability disclaimers
+
+## User Roles and Permissions:
+* **Unauthenticated Users** – Can view landing page and sign up/login only
+* **Authenticated Users** – Full access to all features including:
+  - Manage personal collection and containers
+  - Import cards via CSV or manual entry
+  - Create and manage wishlist
+  - Browse marketplace and contact sellers
+  - List cards for sale
+  - Send/receive messages
+  - Complete transactions and leave reviews
+  - View personal analytics dashboard
+* **Review-Pending Users** – Users who completed transactions but haven't submitted reviews are restricted from new marketplace actions until review completion
+
+## Shared Components:
+* **Navigation System** – Top navigation bar with main tabs (Collection, Marketplace, Wishlist, Messages, Profile) and responsive hamburger menu for mobile
+* **Header/Top Bar** – Logo, main navigation, search bar, user avatar dropdown with logout option, and location indicator
+* **Breadcrumbs** – Hierarchical navigation for deep pages (Collection > Container Name > Card Details)
+* **Card Display Components** – Reusable card components with multiple view types (thumbnail small, thumbnail large, text details)
+* **Filter & Sort Controls** – Consistent filtering and sorting interface across collection and marketplace pages
+* **Container Selector** – Dropdown/modal for selecting containers when adding cards
+* **Price Display** – Consistent price formatting with change indicators and TCGPlayer attribution
+* **User Rating Display** – Star ratings and recommendation badges for user profiles
+* **Loading States** – Skeleton screens and loading spinners for data-heavy pages
+* **Location Distance** – Component showing distance to other users for marketplace listings
+
+## Modals/Popups:
+* **Add Card to Collection** – Search and select cards with quantity and condition options
+* **Create/Edit Container** – Form for container name, type, description, and visibility settings
+* **Card Details** – Expanded view with full card information, pricing history, and actions
+* **Contact Seller** – Quick message composer to initiate trade conversations
+* **Transaction Completion** – Mark transaction complete and mandatory review submission
+* **Import Preview** – Preview CSV import with column mapping and error handling
+* **Confirm Actions** – Delete confirmations for containers, cards, and listings
+* **Location Settings** – Set approximate location for marketplace features
+* **Wishlist Priority** – Set priority level and maximum price for wishlist items
+
+## Technical Requirements:
+* Use **Next.js with Tailwind CSS and shadcn/ui components** for styling
+* Focus on component reusability with consistent design system
+* Implement URL-based routing for all pages with proper nested routes
+* Create proper hooks and services for API data handling with React Query or SWR
+* Develop a mock API store with realistic data structure including:
+  - Complete MTG card database with Scryfall IDs
+  - User collections with container relationships
+  - Marketplace listings with geolocation data
+  - Message threads and transaction history
+  - User profiles with rating systems
+* Ensure the application is fully functional end-to-end with proper state management
+* Implement proper error handling and loading states throughout
+* Use React Hook Form with Zod validation for all forms
+* Implement responsive design with mobile-first approach
+
+## Additional Considerations:
+* **Geolocation Integration** – Browser geolocation API for location-based marketplace features
+* **Image Optimization** – Lazy loading for card images with Next.js Image component
+* **Search Functionality** – Advanced search with autocomplete and filter combinations
+* **Real-time Features** – Consider real-time messaging updates (WebSocket or polling)
+* **Data Persistence** – Use browser storage for user preferences and draft states
+* **Performance** – Implement virtualization for large card collections and infinite scroll for marketplace
+* **Accessibility** – Ensure proper ARIA labels, keyboard navigation, and screen reader support
+* **Security** – Implement proper input validation and sanitization
+* **Analytics Ready** – Structure for future analytics tracking implementation
+* **Dark Theme** – Implement dark theme with teal accent colors as specified in design requirements
+* **Offline Capability** – Consider basic offline functionality for viewing collections

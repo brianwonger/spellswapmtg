@@ -9,9 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, MapPin } from "lucide-react"
+import { MapPin } from "lucide-react"
 import { MarketplaceListing } from "@/lib/types"
 import Image from "next/image"
+import Link from "next/link"
 import { FilterDialog } from "@/components/marketplace/filter-dialog"
 import { useState, useEffect } from "react"
 
@@ -169,7 +170,13 @@ export default function MarketplacePage() {
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-gray-500">
-                  Seller: {listing.seller}
+                  Seller:{" "}
+                  <Link 
+                    href={`/marketplace/seller/${encodeURIComponent(listing.seller)}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {listing.seller}
+                  </Link>
                 </p>
               </CardContent>
             </Card>

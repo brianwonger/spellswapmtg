@@ -13,7 +13,9 @@ export async function GET(request: Request) {
       priceRange: {
         min: searchParams.get('priceMin'),
         max: searchParams.get('priceMax')
-      }
+      },
+      seller: searchParams.get('seller'),
+      search: searchParams.get('search')
     }
 
     const supabase = await createClient()
@@ -94,6 +96,17 @@ export async function GET(request: Request) {
 
     if (filters.priceRange.max) {
       query = query.lte('sale_price', parseFloat(filters.priceRange.max))
+    }
+
+    // Filter by seller name
+    if (filters.seller) {
+      query = query.eq('profiles.display_name', filters.seller)
+    }
+
+    // Filter by search term in card name or set name
+    if (filters.search) {
+      const searchTerm = `%${filters.search}%`
+      query = query.or(`default_cards.name.ilike.${searchTerm},default_cards.set_name.ilike.${searchTerm}`)
     }
 
     const { data, error } = await query
