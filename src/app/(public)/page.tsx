@@ -235,22 +235,22 @@ export default function Home() {
             <h3 className="mb-4 font-semibold uppercase tracking-wide text-foreground">Features</h3>
             <ul className="space-y-2 text-muted-foreground">
               <li>
-                <Link href="/features/collection-management" className="hover:text-primary">
+                <Link href="/features#collection-management" className="hover:text-primary">
                   Collection Management
                 </Link>
               </li>
               <li>
-                <Link href="/features/local-marketplace" className="hover:text-primary">
+                <Link href="/features#local-marketplace" className="hover:text-primary">
                   Local Marketplace
                 </Link>
               </li>
               <li>
-                <Link href="/features/price-tracking" className="hover:text-primary">
+                <Link href="/features#price-tracking" className="hover:text-primary">
                   Price Tracking
                 </Link>
               </li>
               <li>
-                <Link href="/features/wishlist" className="hover:text-primary">
+                <Link href="/features#wishlist" className="hover:text-primary">
                   Wishlist
                 </Link>
               </li>
@@ -262,23 +262,18 @@ export default function Home() {
             <h3 className="mb-4 font-semibold uppercase tracking-wide text-foreground">Community</h3>
             <ul className="space-y-2 text-muted-foreground">
               <li>
-                <Link href="/community/trading" className="hover:text-primary">
+                <Link href="/community#trading" className="hover:text-primary">
                   Trading
                 </Link>
               </li>
               <li>
-                <Link href="/community/reviews" className="hover:text-primary">
+                <Link href="/community#reviews" className="hover:text-primary">
                   Reviews
                 </Link>
               </li>
               <li>
-                <Link href="/community/messaging" className="hover:text-primary">
+                <Link href="/community#messaging" className="hover:text-primary">
                   Messaging
-                </Link>
-              </li>
-              <li>
-                <Link href="/community/local-events" className="hover:text-primary">
-                  Local Events
                 </Link>
               </li>
             </ul>
