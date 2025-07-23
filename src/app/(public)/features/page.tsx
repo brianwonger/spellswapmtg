@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Boxes, ShoppingCart, DollarSign, Heart } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 const FEATURES = [
   {
@@ -104,6 +105,94 @@ export default function FeaturesPage() {
           </section>
         ))}
       </main>
+      <div className="flex justify-center mt-8">
+        <Link href="/">
+          <Button size="lg">Back to Homepage</Button>
+        </Link>
+      </div>
+      {/* Footer (copied from homepage) */}
+      <footer className="mt-16 border-t pt-10 text-sm">
+        <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-3">
+          {/* Features */}
+          <div>
+            <h3 className="mb-4 font-semibold uppercase tracking-wide text-foreground">Features</h3>
+            <ul className="space-y-2 text-muted-foreground">
+              <li>
+                <Link href="/features#collection-management" className="hover:text-primary">
+                  Collection Management
+                </Link>
+              </li>
+              <li>
+                <Link href="/features#local-marketplace" className="hover:text-primary">
+                  Local Marketplace
+                </Link>
+              </li>
+              <li>
+                <Link href="/features#price-tracking" className="hover:text-primary">
+                  Price Tracking
+                </Link>
+              </li>
+              <li>
+                <Link href="/features#wishlist" className="hover:text-primary">
+                  Wishlist
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Community */}
+          <div>
+            <h3 className="mb-4 font-semibold uppercase tracking-wide text-foreground">Community</h3>
+            <ul className="space-y-2 text-muted-foreground">
+              <li>
+                <Link href="/community#trading" className="hover:text-primary">
+                  Trading
+                </Link>
+              </li>
+              <li>
+                <Link href="/community#reviews" className="hover:text-primary">
+                  Reviews
+                </Link>
+              </li>
+              <li>
+                <Link href="/community#messaging" className="hover:text-primary">
+                  Messaging
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Support */}
+          <div>
+            <h3 className="mb-4 font-semibold uppercase tracking-wide text-foreground">Support</h3>
+            <ul className="space-y-2 text-muted-foreground">
+              <li>
+                <Link href="/support/help-center" className="hover:text-primary">
+                  Help Center
+                </Link>
+              </li>
+              <li>
+                <Link href="/support/contact" className="hover:text-primary">
+                  Contact Us
+                </Link>
+              </li>
+              <li>
+                <Link href="/legal/terms" className="hover:text-primary">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link href="/legal/privacy" className="hover:text-primary">
+                  Privacy Policy
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p className="mt-10 text-center text-xs text-muted-foreground">
+          © {new Date().getFullYear()} SpellSwap. All rights reserved.
+        </p>
+      </footer>
     </div>
   )
 } 
