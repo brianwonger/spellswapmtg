@@ -31,6 +31,11 @@ export default function MarketplacePage() {
       // Build query parameters
       const params = new URLSearchParams()
       
+      // Add search query to filters if it exists
+      if (searchQuery) {
+        params.set('search', searchQuery)
+      }
+      
       if (filters) {
         if (filters.colors?.length) params.set('colors', filters.colors.join(','))
         if (filters.manaCosts?.length) params.set('manaCosts', filters.manaCosts.join(','))
@@ -45,16 +50,7 @@ export default function MarketplacePage() {
       if (!response.ok) throw new Error('Failed to fetch listings')
       
       const data = await response.json()
-      
-      // Apply local search filter if there's a search query
-      const filteredData = searchQuery
-        ? data.filter((listing: MarketplaceListing) => 
-            listing.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            listing.set.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : data
-
-      setListings(filteredData)
+      setListings(data)
     } catch (error) {
       console.error('Error loading listings:', error)
     } finally {
@@ -62,30 +58,21 @@ export default function MarketplacePage() {
     }
   }
 
-  // Load initial data
-  useEffect(() => {
-    loadListings()
-  }, [])
-
-  // Handle search input changes
+  // Combined useEffect for search and category changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadListings()
-    }, 300) // Debounce search
-
+      const filters = selectedCategory !== 'all' ? { format: selectedCategory } : undefined
+      loadListings(filters)
+    }, 300)
+    
     return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  // Handle category changes
-  useEffect(() => {
-    if (selectedCategory !== 'all') {
-      loadListings({ format: selectedCategory })
-    } else {
-      loadListings()
-    }
-  }, [selectedCategory])
+  }, [searchQuery, selectedCategory])
 
   const handleFiltersChange = async (filters: any) => {
+    // Preserve category filter when applying other filters
+    if (selectedCategory !== 'all') {
+      filters = { ...filters, format: selectedCategory }
+    }
     await loadListings(filters)
   }
 
