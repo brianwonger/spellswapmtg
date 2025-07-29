@@ -16,6 +16,7 @@ export type CardFilters = {
   maxPrice: number | null
   condition: string | null
   foil: boolean | null
+  saleStatus: string | null
 }
 
 interface FilterDialogProps {
@@ -43,6 +44,24 @@ export function FilterDialog({ filters, onFiltersChange }: FilterDialogProps) {
           <DialogTitle>Filter Cards</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {/* Sale Status */}
+          <div className="grid gap-2">
+            <Label htmlFor="saleStatus">Sale Status</Label>
+            <Select
+              value={filters.saleStatus || 'any'}
+              onValueChange={(value) => updateFilter('saleStatus', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">All Cards</SelectItem>
+                <SelectItem value="for_sale">For Sale Only</SelectItem>
+                <SelectItem value="not_for_sale">Not For Sale</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Card Type */}
           <div className="grid gap-2">
             <Label htmlFor="type">Card Type</Label>

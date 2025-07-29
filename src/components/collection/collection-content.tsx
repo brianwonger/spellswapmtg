@@ -128,6 +128,14 @@ export function CollectionContent({
 
   // Apply additional filters
   const filteredCards = searchFilteredCards.filter(card => {
+    // Apply sale status filter
+    if (filters.saleStatus === 'for_sale' && !card.is_for_sale) {
+      return false
+    }
+    if (filters.saleStatus === 'not_for_sale' && card.is_for_sale) {
+      return false
+    }
+
     // Apply each filter if it's set
     if (filters.type && !card.default_cards.type_line.toLowerCase().includes(filters.type.toLowerCase())) {
       return false
@@ -245,7 +253,7 @@ export function CollectionContent({
         const quantity = getCardQuantity(card, container)
 
         return (
-          <Card key={card.id} className="overflow-hidden">
+          <Card key={card.id} className="overflow-hidden group">
             <div className="aspect-[3/4] relative p-2 bg-muted/10">
               <img
                 src={imageUrl}
@@ -254,35 +262,37 @@ export function CollectionContent({
                 loading="lazy"
               />
               {card.is_for_sale && (
-                <div className="absolute top-0 left-0 bg-green-500/80 text-white px-3 py-1 rounded-br-lg font-medium">
+                <div className="absolute top-2 left-2 bg-primary/80 text-primary-foreground px-2 py-0.5 rounded-br-lg text-sm font-medium">
                   For Sale
                 </div>
               )}
-              <button
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to remove this card from your collection?')) {
-                    await onDeleteCard(card.id)
-                  }
-                }}
-                className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                title="Remove card"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h18"></path>
-                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                </svg>
-              </button>
-              <button
-                onClick={() => setEditingCard(card)}
-                className="absolute top-2 right-12 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                title="Edit card"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                  <path d="m15 5 4 4"></path>
-                </svg>
-              </button>
+              <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => setEditingCard(card)}
+                  className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                  title="Edit card"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                    <path d="m15 5 4 4"></path>
+                  </svg>
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to remove this card from your collection?')) {
+                      await onDeleteCard(card.id)
+                    }
+                  }}
+                  className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                  title="Remove card"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
             <CardHeader>
               <CardTitle className="text-lg">{cardDetails.name}</CardTitle>

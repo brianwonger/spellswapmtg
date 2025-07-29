@@ -66,7 +66,8 @@ export default function CollectionPage() {
     minPrice: null,
     maxPrice: null,
     condition: null,
-    foil: null
+    foil: null,
+    saleStatus: null
   })
 
   useEffect(() => {
