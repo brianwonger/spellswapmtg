@@ -62,4 +62,7 @@ export interface MarketplaceListing {
   location: string | null;
   imageUrl: string;
   distance?: number;
+  colors?: string[];
+  cmc?: number;
+  rarity?: string;
 } 

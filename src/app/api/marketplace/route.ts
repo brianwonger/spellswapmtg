@@ -1,6 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+// Function to calculate distance between two points using Haversine formula
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371 // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -25,7 +38,27 @@ export async function GET(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    // Build the base query
+    // Get current user's coordinates if logged in
+    let userCoordinates: { lat: number; lng: number } | null = null
+    if (user) {
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('location_coordinates')
+        .eq('id', user.id)
+        .single()
+
+      if (userProfile?.location_coordinates) {
+        // Extract coordinates using PostGIS function
+        const { data: coordsData } = await supabase
+          .rpc('get_coordinates', { point: userProfile.location_coordinates })
+
+        if (coordsData && coordsData.length > 0) {
+          userCoordinates = { lat: coordsData[0].lat, lng: coordsData[0].lng }
+        }
+      }
+    }
+
+    // Build the base query - now include location_coordinates
     let query = supabase
       .from('user_cards')
       .select(`
@@ -49,7 +82,8 @@ export async function GET(request: Request) {
         profiles (
           id,
           display_name,
-          location_name
+          location_name,
+          location_coordinates
         )
       `)
       .eq('is_for_sale', true)
@@ -116,31 +150,59 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch listings' }, { status: 500 })
     }
 
-    const listings = data
-      .filter(listing => listing.profiles && listing.default_cards)
-      .map((listing: any) => {
-        // Parse image_uris if it's a string
-        let imageUris
-        try {
-          imageUris = typeof listing.default_cards.image_uris === 'string'
-            ? JSON.parse(listing.default_cards.image_uris)
-            : listing.default_cards.image_uris
-        } catch (e) {
-          console.error('Error parsing image_uris:', e)
-          imageUris = null
-        }
+    const listings = await Promise.all(
+      data
+        .filter(listing => listing.profiles && listing.default_cards)
+        .map(async (listing: any) => {
+          // Parse image_uris if it's a string
+          let imageUris
+          try {
+            imageUris = typeof listing.default_cards.image_uris === 'string'
+              ? JSON.parse(listing.default_cards.image_uris)
+              : listing.default_cards.image_uris
+          } catch (e) {
+            console.error('Error parsing image_uris:', e)
+            imageUris = null
+          }
 
-        return {
-          id: listing.id,
-          name: listing.default_cards.name,
-          set: listing.default_cards.set_name,
-          condition: listing.condition,
-          price: listing.sale_price,
-          seller: listing.profiles.display_name,
-          location: listing.profiles.location_name,
-          imageUrl: imageUris?.normal || imageUris?.large || null
-        }
-      })
+          // Calculate distance if both user and seller have coordinates
+          let distance: number | undefined = undefined
+          if (userCoordinates && listing.profiles.location_coordinates) {
+            try {
+              // Extract seller coordinates using PostGIS function
+              const { data: sellerCoordsData } = await supabase
+                .rpc('get_coordinates', { point: listing.profiles.location_coordinates })
+
+              if (sellerCoordsData && sellerCoordsData.length > 0) {
+                const sellerCoords = { lat: sellerCoordsData[0].lat, lng: sellerCoordsData[0].lng }
+                distance = calculateDistance(
+                  userCoordinates.lat,
+                  userCoordinates.lng,
+                  sellerCoords.lat,
+                  sellerCoords.lng
+                )
+              }
+            } catch (error) {
+              console.error('Error calculating distance:', error)
+            }
+          }
+
+          return {
+            id: listing.id,
+            name: listing.default_cards.name,
+            set: listing.default_cards.set_name,
+            condition: listing.condition,
+            price: listing.sale_price,
+            seller: listing.profiles.display_name,
+            location: listing.profiles.location_name,
+            distance: distance,
+            imageUrl: imageUris?.normal || imageUris?.large || null,
+            colors: listing.default_cards.colors,
+            cmc: listing.default_cards.cmc,
+            rarity: listing.default_cards.rarity
+          }
+        })
+    )
 
     return NextResponse.json(listings)
   } catch (error) {
