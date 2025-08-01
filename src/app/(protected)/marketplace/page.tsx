@@ -199,7 +199,7 @@ export default function MarketplacePage() {
                 <p className="text-sm text-gray-500">{listing.set}</p>
                 <div className="mt-2 flex items-center justify-between">
                   <div className="text-sm">
-                    <span className="font-medium">${listing.price}</span> ·{" "}
+                    <span className="font-medium">${listing.price?.toFixed(2) ?? 'N/A'}</span> ·{" "}
                     <span className="text-gray-500">{listing.condition}</span>
                   </div>
                   <div className="flex items-center text-sm text-gray-500">

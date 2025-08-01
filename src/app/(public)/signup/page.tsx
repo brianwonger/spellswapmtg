@@ -14,10 +14,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { slugify } from '@/lib/utils'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [isSignedUp, setIsSignedUp] = useState(false)
   const [signupError, setSignupError] = useState<string | null>(null)
@@ -39,6 +41,10 @@ export default function SignupPage() {
         password,
         options: {
           emailRedirectTo: `${location.origin}/auth/email-confirmed`,
+          data: {
+            display_name: displayName,
+            username: slugify(displayName),
+          }
         },
       })
 
@@ -114,6 +120,20 @@ export default function SignupPage() {
             <div className="mb-2 text-red-500 text-sm text-center">{signupError}</div>
           )}
           <form onSubmit={handleSignUp} className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="display_name">Display Name</Label>
+              <Input
+                id="display_name"
+                type="text"
+                placeholder="Your Name"
+                required
+                value={displayName}
+                onChange={(e) => {
+                  setDisplayName(e.target.value)
+                  setSignupError(null)
+                }}
+              />
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input

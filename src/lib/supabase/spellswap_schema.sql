@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
-  display_name VARCHAR(100),
+  display_name VARCHAR(100) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   location_name VARCHAR(255), -- City, State format
   location_coordinates GEOGRAPHY(POINT, 4326), -- PostGIS for location-based queries
