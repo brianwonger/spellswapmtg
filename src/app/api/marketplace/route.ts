@@ -160,7 +160,7 @@ export async function GET(request: Request) {
           sale_price: number
           condition: string
           notes?: string
-          profiles: { display_name: string; id: string; location_name?: string; location_coordinates?: string } | null
+          profiles: { display_name: string; id: string; location_name?: string; location_coordinates?: string }[] | null
           default_cards: {
             id: string
             name: string
