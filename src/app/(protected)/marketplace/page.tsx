@@ -19,110 +19,68 @@ import { useState, useEffect, useCallback } from "react"
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
 export default function MarketplacePage() {
-  const [filteredListings, setFilteredListings] = useState<MarketplaceListing[]>([])
-  const [cachedListings, setCachedListings] = useState<MarketplaceListing[]>([])
+  const [listings, setListings] = useState<MarketplaceListing[]>([])
+  const [filters, setFilters] = useState<Partial<MarketplaceFilters>>({})
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
   const [isLoading, setIsLoading] = useState(true)
 
-  const loadListings = async (filters?: Partial<MarketplaceFilters>) => {
+  const loadListings = useCallback(async (currentFilters: Partial<MarketplaceFilters>, query: string) => {
     try {
       setIsLoading(true)
       
-      // Build query parameters
       const params = new URLSearchParams()
       
-      // Only include format filter from the URL, other filters will be client-side
-      if (filters?.format) {
-        params.set('format', filters.format)
+      if (currentFilters.colors?.length) {
+        params.set('colors', currentFilters.colors.join(','))
+      }
+      if (currentFilters.manaCosts?.length) {
+        params.set('manaCosts', currentFilters.manaCosts.join(','))
+      }
+      if (currentFilters.format) {
+        params.set('format', currentFilters.format)
+      }
+      if (currentFilters.setName) {
+        params.set('setName', currentFilters.setName)
+      }
+      if (currentFilters.rarity?.length) {
+        params.set('rarity', currentFilters.rarity.join(','))
+      }
+      if (currentFilters.priceRange?.min) {
+        params.set('priceMin', currentFilters.priceRange.min)
+      }
+      if (currentFilters.priceRange?.max) {
+        params.set('priceMax', currentFilters.priceRange.max)
+      }
+      if (query) {
+        params.set('search', query)
       }
 
       const response = await fetch(`/api/marketplace?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch listings')
       
       const data = await response.json()
-      setCachedListings(data) // Store in cache
-      setFilteredListings(data)
+      setListings(data)
     } catch (error) {
       console.error('Error loading listings:', error)
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  // Function to filter listings client-side
-  const filterListings = useCallback((query: string, filters?: Partial<MarketplaceFilters>) => {
-    let filtered = [...cachedListings]
-
-    // Filter by search query
-    if (query) {
-      const searchLower = query.toLowerCase()
-      filtered = filtered.filter(listing => 
-        listing.name.toLowerCase().includes(searchLower) ||
-        listing.set.toLowerCase().includes(searchLower)
-      )
-    }
-
-    // Apply other filters
-    if (filters) {
-      if (filters.colors?.length) {
-        filtered = filtered.filter(listing => 
-          listing.colors?.some(color => filters.colors!.includes(color))
-        )
-      }
-      if (filters.manaCosts?.length) {
-        filtered = filtered.filter(listing => {
-          const cmc = listing.cmc ?? 0
-          return filters.manaCosts!.includes(cmc >= 6 ? '6+' : cmc.toString())
-        })
-      }
-      if (filters.rarity?.length) {
-        filtered = filtered.filter(listing => 
-          listing.rarity && filters.rarity!.includes(listing.rarity.toLowerCase())
-        )
-      }
-      if (filters.setName) {
-        const setNameLower = filters.setName.toLowerCase()
-        filtered = filtered.filter(listing => 
-          listing.set.toLowerCase().includes(setNameLower)
-        )
-      }
-      if (filters.priceRange?.min) {
-        filtered = filtered.filter(listing => 
-          listing.price !== null && listing.price >= parseFloat(filters.priceRange!.min)
-        )
-      }
-      if (filters.priceRange?.max) {
-        filtered = filtered.filter(listing => 
-          listing.price !== null && listing.price <= parseFloat(filters.priceRange!.max)
-        )
-      }
-    }
-
-    setFilteredListings(filtered)
-  }, [cachedListings])
-
-  // Combined useEffect for search and category changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      const filters = selectedCategory !== 'all' ? { format: selectedCategory } : undefined
-      loadListings(filters)
+      loadListings(filters, searchQuery)
     }, 300)
     
     return () => clearTimeout(timer)
-  }, [selectedCategory]) // Only reload from API when category changes
+  }, [filters, searchQuery, loadListings])
 
-  // Separate useEffect for client-side filtering
-  useEffect(() => {
-    filterListings(searchQuery)
-  }, [searchQuery, filterListings])
+  const handleFiltersChange = (newFilters: MarketplaceFilters) => {
+    setFilters(prevFilters => ({ ...prevFilters, ...newFilters }))
+  }
 
-  const handleFiltersChange = async (filters: MarketplaceFilters) => {
-    // Preserve category filter when applying other filters
-    if (selectedCategory !== 'all') {
-      filters = { ...filters, format: selectedCategory }
-    }
-    filterListings(searchQuery, filters)
+  const handleCategoryChange = (category: string) => {
+    setFilters(prevFilters => ({ ...prevFilters, format: category === 'all' ? undefined : category }))
   }
 
   return (
@@ -143,8 +101,8 @@ export default function MarketplacePage() {
         </div>
         <div className="flex gap-2">
           <Select 
-            value={selectedCategory} 
-            onValueChange={setSelectedCategory}
+            value={filters.format || 'all'} 
+            onValueChange={handleCategoryChange}
           >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Category" />
@@ -176,12 +134,12 @@ export default function MarketplacePage() {
               </CardContent>
             </Card>
           ))
-        ) : filteredListings.length === 0 ? (
+        ) : listings.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <p className="text-gray-500">No cards found matching your criteria.</p>
           </div>
         ) : (
-          filteredListings.map((listing) => (
+          listings.map((listing) => (
             <Card key={listing.id} className="overflow-hidden">
               <div className="aspect-[3/4] relative">
                 <Image

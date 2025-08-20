@@ -68,7 +68,7 @@ export async function GET(request: Request) {
         sale_price,
         condition,
         notes,
-        default_cards!user_cards_card_id_fkey (
+        default_cards!inner (
           id,
           name,
           set_name,
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
           rarity,
           legalities
         ),
-        profiles!user_cards_user_id_fkey (
+        profiles!inner (
           id,
           display_name,
           location_name,
@@ -153,15 +153,9 @@ export async function GET(request: Request) {
     const listings = await Promise.all(
       data
         .filter(listing => listing.profiles && listing.default_cards)
-        .map(async (listing: {
-          id: string
-          user_id: string
-          is_for_sale: boolean
-          sale_price: number
-          condition: string
-          notes?: string
-          profiles: { display_name: string; id: string; location_name?: string; location_coordinates?: string }[] | null
-          default_cards: {
+        .map(async (listing) => {
+          // Parse image_uris if it's a string
+          const defaultCard = listing.default_cards as unknown as {
             id: string
             name: string
             image_uris: string | null
@@ -172,10 +166,12 @@ export async function GET(request: Request) {
             cmc?: number
             legalities?: Record<string, string>
           } | null
-        }) => {
-          // Parse image_uris if it's a string
-          const defaultCard = listing.default_cards
-          const profile = listing.profiles
+          const profile = listing.profiles as unknown as {
+            display_name: string
+            id: string
+            location_name?: string
+            location_coordinates?: string
+          } | null
 
           // Return null if either defaultCard or profile is missing
           if (!defaultCard || !profile) {
