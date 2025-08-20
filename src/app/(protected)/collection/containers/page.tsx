@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -183,10 +183,10 @@ function DeleteDialog({ container, hasCards, open, onOpenChange, onConfirm }: De
         <DialogHeader>
           <DialogTitle>Delete Container</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete "{container?.name}"?
+            Are you sure you want to delete &ldquo;{container?.name}&rdquo;?
             {hasCards && (
               <span className="mt-2 text-yellow-600 block">
-                Warning: This container has cards in it. Deleting it will move all cards to your "Unorganized Cards" container.
+                Warning: This container has cards in it. Deleting it will move all cards to your &ldquo;Unorganized Cards&rdquo; container.
               </span>
             )}
           </DialogDescription>
@@ -238,7 +238,7 @@ function MarkForSaleDialog({ container, open, onOpenChange, onConfirm }: MarkFor
         <DialogHeader>
           <DialogTitle>Mark Cards for Sale</DialogTitle>
           <DialogDescription>
-            Set all cards in "{container?.name}" for sale at a percentage of their market value.
+            Set all cards in &ldquo;{container?.name}&rdquo; for sale at a percentage of their market value.
           </DialogDescription>
         </DialogHeader>
 
@@ -290,14 +290,10 @@ export default function ContainersPage() {
   const [containerCardCounts, setContainerCardCounts] = useState<Record<string, number>>({});
   const [groupingOrphans, setGroupingOrphans] = useState(false);
   const [markingForSaleContainer, setMarkingForSaleContainer] = useState<Container | null>(null);
-  const supabase = createClient();
 
-  useEffect(() => {
-    fetchContainers();
-  }, []);
-
-  async function fetchContainers() {
+  const fetchContainers = useCallback(async () => {
     try {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -327,12 +323,17 @@ export default function ContainersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    fetchContainers();
+  }, [fetchContainers]);
 
   const handleEdit = async (updates: Partial<Container>) => {
     if (!editingContainer) return;
 
     try {
+      const supabase = createClient();
       const { error } = await supabase
         .from('containers')
         .update(updates)
@@ -354,6 +355,7 @@ export default function ContainersPage() {
     if (!deletingContainer) return;
 
     try {
+      const supabase = createClient();
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -475,6 +477,7 @@ export default function ContainersPage() {
 
   async function handleGroupOrphans() {
     try {
+      const supabase = createClient();
       setGroupingOrphans(true);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
@@ -584,6 +587,7 @@ export default function ContainersPage() {
     if (!markingForSaleContainer) return;
 
     try {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -605,7 +609,7 @@ export default function ContainersPage() {
         `)
         .eq('container_id', markingForSaleContainer.id) as {
           data: ContainerItemWithUserCard[] | null;
-          error: any;
+          error: Error | null;
         };
 
       if (itemsError) {
@@ -682,6 +686,7 @@ export default function ContainersPage() {
 
   const handleUnmarkForSale = async (container: Container) => {
     try {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 

@@ -110,13 +110,33 @@ export async function getMarketplaceListings(filters?: MarketplaceFilters): Prom
 
   const listings: MarketplaceListing[] = data
     .filter(listing => listing.profiles && listing.default_cards)
-    .map((listing: any) => {
+    .map((listing: {
+      id: string
+      user_id: string
+      is_for_sale: boolean
+      sale_price: number | null
+      condition: string
+      notes?: string
+      profiles: { display_name: string; id: string; location_name?: string; location_coordinates?: string }[]
+      default_cards: {
+        id: string
+        name: string
+        image_uris: string | null
+        set_name: string
+        rarity: string
+        colors?: string[]
+        cmc?: number
+        legalities?: Record<string, string>
+      }[]
+    }) => {
       // Parse image_uris if it's a string
+      const defaultCard = listing.default_cards[0]
+      const profile = listing.profiles[0]
       let imageUris;
       try {
-        imageUris = typeof listing.default_cards.image_uris === 'string' 
-          ? JSON.parse(listing.default_cards.image_uris)
-          : listing.default_cards.image_uris;
+        imageUris = typeof defaultCard.image_uris === 'string' 
+          ? JSON.parse(defaultCard.image_uris)
+          : defaultCard.image_uris;
       } catch (e) {
         console.error('Error parsing image_uris:', e);
         imageUris = null;
@@ -124,12 +144,12 @@ export async function getMarketplaceListings(filters?: MarketplaceFilters): Prom
 
       return {
         id: listing.id,
-        name: listing.default_cards.name,
-        set: listing.default_cards.set_name,
+        name: defaultCard.name,
+        set: defaultCard.set_name,
         condition: listing.condition,
         price: listing.sale_price,
-        seller: listing.profiles.display_name,
-        location: listing.profiles.location_name,
+        seller: profile.display_name,
+        location: profile.location_name || null,
         imageUrl: imageUris?.normal || imageUris?.large || null
       };
     });

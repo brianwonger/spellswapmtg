@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+
 import {
   Select,
   SelectContent,
@@ -10,12 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus, ArrowUpDown, Package } from "lucide-react"
+import { Plus, ArrowUpDown, Package } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { CollectionContent } from "@/components/collection/collection-content"
 import { useEffect, useState } from "react"
-import { UserCard, Container, CardDetails } from '@/lib/types'
+import { UserCard, Container } from '@/lib/types'
 import { FilterDialog, CardFilters } from "@/components/collection/filter-dialog"
 
 interface DatabaseUserCard {
@@ -523,11 +523,4 @@ export default function CollectionPage() {
   )
 } 
 
-// Update the total value calculation to handle undefined prices
-function calculateTotalValue(cards: UserCard[]): number {
-  return cards.reduce((total, card) => {
-    const price = card.default_cards.prices?.usd
-    if (!price) return total
-    return total + (parseFloat(price) * card.quantity)
-  }, 0)
-} 
+ 

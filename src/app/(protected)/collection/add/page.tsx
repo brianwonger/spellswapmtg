@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, ArrowLeft, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { Toaster, toast } from 'sonner'
 import {
   Dialog,
@@ -239,7 +240,7 @@ export default function AddCardsPage() {
             acc[key] = value;
           }
           return acc;
-        }, {} as Record<string, any>);
+        }, {} as Record<string, unknown>);
 
         const { error: activityError } = await supabase
           .from('user_activities')
@@ -344,11 +345,11 @@ export default function AddCardsPage() {
           {searchResults.map((card) => (
             <Card key={card.id} className="overflow-hidden">
               <div className="aspect-[3/4] relative">
-                <img
+                <Image
                   src={getCardImageUrl(card.image_uris)}
                   alt={card.name}
-                  className="object-cover w-full h-full"
-                  loading="lazy"
+                  fill
+                  className="object-cover"
                 />
               </div>
               <CardHeader>

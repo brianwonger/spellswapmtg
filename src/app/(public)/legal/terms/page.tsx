@@ -13,10 +13,10 @@ export default function TermsOfServicePage() {
 
       <section className="space-y-6 text-muted-foreground text-sm leading-relaxed">
         <p>
-          These Terms of Service ("Terms") constitute a legally binding agreement between you
-          ("User," "you," or "your") and SpellSwap ("SpellSwap," "we," "us," or "our") governing
+          These Terms of Service (&ldquo;Terms&rdquo;) constitute a legally binding agreement between you
+          (&ldquo;User,&rdquo; &ldquo;you,&rdquo; or &ldquo;your&rdquo;) and SpellSwap (&ldquo;SpellSwap,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) governing
           your access to and use of the SpellSwap marketplace web application, its related services,
-          and any content made available through it (collectively, the "Service"). By creating an
+          and any content made available through it (collectively, the &ldquo;Service&rdquo;). By creating an
           account, accessing, or using the Service, you agree to be bound by these Terms.
         </p>
 
@@ -62,13 +62,13 @@ export default function TermsOfServicePage() {
         <ul className="list-disc pl-6">
           <li>Violate any applicable law or regulation</li>
           <li>Post harassing, fraudulent, or misleading content</li>
-          <li>Interfere with or disrupt the Service's integrity or performance</li>
+          <li>Interfere with or disrupt the Service&apos;s integrity or performance</li>
           <li>Attempt to access non-public areas or systems without authorisation</li>
         </ul>
 
         <h2 className="text-base font-semibold text-foreground">7. Disclaimer & Limitation of Liability</h2>
         <p>
-          The Service is provided on an "AS IS" and "AS AVAILABLE" basis without warranties of any
+          The Service is provided on an &ldquo;AS IS&rdquo; and &ldquo;AS AVAILABLE&rdquo; basis without warranties of any
           kind. To the fullest extent permitted by law, SpellSwap disclaims all warranties and shall
           not be liable for any indirect, incidental, special, consequential, or punitive damages
           arising out of or related to your use of the Service.

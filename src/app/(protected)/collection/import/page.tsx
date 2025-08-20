@@ -129,7 +129,7 @@ export default function ImportCollectionPage() {
           originalLine: line,
         } as ParsedCSVCard
       })
-      .filter((card): card is ParsedCSVCard => card !== null && card.name && card.set)
+      .filter((card): card is ParsedCSVCard => card !== null && !!card.name && !!card.set)
   }
 
   const handleMoxfieldImport = async () => {
@@ -415,7 +415,7 @@ export default function ImportCollectionPage() {
       toast.info(`CSV Import complete: ${successfulImports} successful, ${failedImports} failed.`)
       setIsImportingCSV(false)
 
-    } catch (error) {
+    } catch {
       toast.error('Failed to read CSV file.')
       setIsImportingCSV(false)
     }

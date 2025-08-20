@@ -1,7 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Send } from "lucide-react"
+import Image from "next/image"
 
 // Mock data for initial development
 const mockConversations = [
@@ -71,10 +71,12 @@ export default function MessagesPage() {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <img
+                  <Image
                     src={conversation.avatar}
                     alt={conversation.user}
-                    className="w-10 h-10 rounded-full"
+                    width={40}
+                    height={40}
+                    className="rounded-full"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -100,10 +102,12 @@ export default function MessagesPage() {
         <div className="flex-1 flex flex-col border rounded-lg">
           <div className="p-4 border-b">
             <div className="flex items-center gap-3">
-              <img
+              <Image
                 src="https://placehold.co/40"
                 alt="MTGDealer123"
-                className="w-10 h-10 rounded-full"
+                width={40}
+                height={40}
+                className="rounded-full"
               />
               <div>
                 <h2 className="font-semibold">MTGDealer123</h2>

@@ -5,7 +5,8 @@ import { useState, useRef, useEffect } from "react"
 import { ViewMode, ViewToggle } from "../ui/view-toggle"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { UserCard, CardDetails } from '@/lib/types'
+import Image from "next/image"
+import { UserCard } from '@/lib/types'
 import { EditCardDialog } from "./edit-card-dialog"
 import { Container } from '@/lib/types'
 import { CardFilters } from "./filter-dialog"
@@ -249,17 +250,16 @@ export function CollectionContent({
       {sortedCards?.map((card) => {
         const cardDetails = card.default_cards
         const imageUrl = getCardImageUrl(cardDetails.image_uris)
-        const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
         const quantity = getCardQuantity(card, container)
 
         return (
           <Card key={card.id} className="overflow-hidden group">
             <div className="aspect-[3/4] relative p-2 bg-muted/10">
-              <img
+              <Image
                 src={imageUrl}
                 alt={cardDetails.name}
-                className="object-cover w-full h-full rounded-sm"
-                loading="lazy"
+                fill
+                className="object-cover rounded-sm"
               />
               {card.is_for_sale && (
                 <div className="absolute top-2 left-2 bg-primary/80 text-primary-foreground px-2 py-0.5 rounded-br-lg text-sm font-medium">
@@ -366,7 +366,6 @@ export function CollectionContent({
         <tbody>
           {sortedCards?.map((card) => {
             const cardDetails = card.default_cards
-            const price = card.is_for_sale ? (card.sale_price ?? 0) : (Number(cardDetails.prices?.usd) || 0)
             const quantity = getCardQuantity(card, container)
 
             return (

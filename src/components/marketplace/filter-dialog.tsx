@@ -21,8 +21,20 @@ const FORMATS = ['Standard', 'Modern', 'Commander', 'Pioneer', 'Legacy', 'Vintag
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic']
 const MANA_COSTS = ['0', '1', '2', '3', '4', '5', '6+']
 
+export interface MarketplaceFilters {
+  colors: string[]
+  manaCosts: string[]
+  format: string
+  setName: string
+  rarity: string[]
+  priceRange: {
+    min: string
+    max: string
+  }
+}
+
 interface FilterDialogProps {
-  onFiltersChange: (filters: any) => void;
+  onFiltersChange: (filters: MarketplaceFilters) => void;
 }
 
 const initialFilterState = {

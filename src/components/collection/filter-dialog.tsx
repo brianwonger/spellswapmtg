@@ -25,7 +25,7 @@ interface FilterDialogProps {
 }
 
 export function FilterDialog({ filters, onFiltersChange }: FilterDialogProps) {
-  const updateFilter = (key: keyof CardFilters, value: any) => {
+  const updateFilter = (key: keyof CardFilters, value: CardFilters[keyof CardFilters]) => {
     onFiltersChange({
       ...filters,
       [key]: value === 'any' ? null : value

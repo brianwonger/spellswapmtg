@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from '@/components/ui/button'
-import { PlusCircle, TrendingUp, Package, ListChecks, Library, Star, DollarSign } from 'lucide-react'
+import { PlusCircle, TrendingUp, ListChecks, Library, Star, DollarSign } from 'lucide-react'
 import Link from 'next/link'
 
 interface CardWithPrices {
@@ -30,7 +30,7 @@ interface Activity {
   id: string
   activity_type: string
   description: string
-  metadata: any
+  metadata: Record<string, unknown>
   created_at: string
 }
 
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   }
 
   // Get total cards count
-  const { data: totalCardsData, error: totalCardsError } = await supabase
+  const { data: totalCardsData } = await supabase
     .from('user_cards')
     .select('quantity')
     .eq('user_id', user.id)
@@ -54,13 +54,13 @@ export default async function DashboardPage() {
   const totalCards = totalCardsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
 
   // Get unique cards count
-  const { count: uniqueCards, error: uniqueCardsError } = await supabase
+  const { count: uniqueCards } = await supabase
     .from('user_cards')
     .select('*', { count: 'exact' })
     .eq('user_id', user.id)
 
   // Get collection value
-  const { data: cardsWithPrices, error: valueError } = await supabase
+  const { data: cardsWithPrices } = await supabase
     .from('user_cards')
     .select(`
       quantity,
@@ -68,7 +68,7 @@ export default async function DashboardPage() {
         prices
       )
     `)
-    .eq('user_id', user.id) as { data: CardWithPrices[] | null, error: any }
+    .eq('user_id', user.id) as { data: CardWithPrices[] | null, error: Error | null }
 
   const totalValue = cardsWithPrices?.reduce((sum, card) => {
     const price = parseFloat(card.default_cards?.prices?.usd || '0')
@@ -82,7 +82,7 @@ export default async function DashboardPage() {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  const { data: recentCardsData, error: recentError } = await supabase
+  const { data: recentCardsData } = await supabase
     .from('user_cards')
     .select('quantity')
     .eq('user_id', user.id)
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
   const recentlyAdded = recentCardsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
 
   // Get active listings
-  const { data: activeListingsData, error: listingsError } = await supabase
+  const { data: activeListingsData } = await supabase
     .from('user_cards')
     .select('quantity')
     .eq('user_id', user.id)
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
   const activeListings = activeListingsData?.reduce((sum, card) => sum + (card.quantity || 0), 0) || 0
 
   // Get top 5 most valuable cards
-  const { data: mostValuableCards, error: mostValuableError } = await supabase
+  const { data: mostValuableCards } = await supabase
     .from('user_cards')
     .select(`
       quantity,
@@ -110,7 +110,7 @@ export default async function DashboardPage() {
       )
     `)
     .eq('user_id', user.id)
-    .not('default_cards', 'is', null) as { data: MostValuableCard[] | null, error: any }
+    .not('default_cards', 'is', null) as { data: MostValuableCard[] | null, error: Error | null }
 
   // Calculate and sort by individual card price
   const topCards = mostValuableCards
@@ -124,12 +124,12 @@ export default async function DashboardPage() {
     .slice(0, 5) || []
 
   // Get recent activities
-  const { data: activities, error: activitiesError } = await supabase
+  const { data: activities } = await supabase
     .from('user_activities')
     .select('*')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(5) as { data: Activity[] | null, error: any }
+    .limit(5) as { data: Activity[] | null, error: Error | null }
 
   return (
     <div className="container py-8">

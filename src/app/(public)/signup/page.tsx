@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useRouter } from 'next/navigation'
+
 import Link from 'next/link'
 import { slugify } from '@/lib/utils'
 
@@ -23,7 +23,7 @@ export default function SignupPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [isSignedUp, setIsSignedUp] = useState(false)
   const [signupError, setSignupError] = useState<string | null>(null)
-  const router = useRouter()
+
   const supabase = createClient()
 
   const handleSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -72,12 +72,12 @@ export default function SignupPage() {
         setIsSignedUp(true)
         setSignupError(null)
       }
-    } catch (error: any) {
-      const errorMessage = error.message || 'Unexpected error during signup'
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unexpected error during signup'
       console.error('Signup error details:', {
         message: errorMessage,
         error: error,
-        stack: error.stack
+        stack: error instanceof Error ? error.stack : undefined
       })
       setSignupError(`Error: ${errorMessage}`)
     }
@@ -92,7 +92,7 @@ export default function SignupPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground text-sm">
-              We've sent a confirmation link to {email}. Please check your inbox
+              We&apos;ve sent a confirmation link to {email}. Please check your inbox
               to complete the sign up process.
             </p>
             <div className="mt-6">

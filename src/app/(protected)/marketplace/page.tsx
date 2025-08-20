@@ -13,20 +13,19 @@ import { MapPin } from "lucide-react"
 import { MarketplaceListing } from "@/lib/types"
 import Image from "next/image"
 import Link from "next/link"
-import { FilterDialog } from "@/components/marketplace/filter-dialog"
-import { useState, useEffect } from "react"
+import { FilterDialog, type MarketplaceFilters } from "@/components/marketplace/filter-dialog"
+import { useState, useEffect, useCallback } from "react"
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
 export default function MarketplacePage() {
-  const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [filteredListings, setFilteredListings] = useState<MarketplaceListing[]>([])
   const [cachedListings, setCachedListings] = useState<MarketplaceListing[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [isLoading, setIsLoading] = useState(true)
 
-  const loadListings = async (filters?: any) => {
+  const loadListings = async (filters?: Partial<MarketplaceFilters>) => {
     try {
       setIsLoading(true)
       
@@ -43,7 +42,6 @@ export default function MarketplacePage() {
       
       const data = await response.json()
       setCachedListings(data) // Store in cache
-      setListings(data)
       setFilteredListings(data)
     } catch (error) {
       console.error('Error loading listings:', error)
@@ -53,7 +51,7 @@ export default function MarketplacePage() {
   }
 
   // Function to filter listings client-side
-  const filterListings = (query: string, filters?: any) => {
+  const filterListings = useCallback((query: string, filters?: Partial<MarketplaceFilters>) => {
     let filtered = [...cachedListings]
 
     // Filter by search query
@@ -69,18 +67,18 @@ export default function MarketplacePage() {
     if (filters) {
       if (filters.colors?.length) {
         filtered = filtered.filter(listing => 
-          listing.colors?.some(color => filters.colors.includes(color))
+          listing.colors?.some(color => filters.colors!.includes(color))
         )
       }
       if (filters.manaCosts?.length) {
         filtered = filtered.filter(listing => {
           const cmc = listing.cmc ?? 0
-          return filters.manaCosts.includes(cmc >= 6 ? '6+' : cmc.toString())
+          return filters.manaCosts!.includes(cmc >= 6 ? '6+' : cmc.toString())
         })
       }
       if (filters.rarity?.length) {
         filtered = filtered.filter(listing => 
-          listing.rarity && filters.rarity.includes(listing.rarity.toLowerCase())
+          listing.rarity && filters.rarity!.includes(listing.rarity.toLowerCase())
         )
       }
       if (filters.setName) {
@@ -91,18 +89,18 @@ export default function MarketplacePage() {
       }
       if (filters.priceRange?.min) {
         filtered = filtered.filter(listing => 
-          listing.price !== null && listing.price >= parseFloat(filters.priceRange.min)
+          listing.price !== null && listing.price >= parseFloat(filters.priceRange!.min)
         )
       }
       if (filters.priceRange?.max) {
         filtered = filtered.filter(listing => 
-          listing.price !== null && listing.price <= parseFloat(filters.priceRange.max)
+          listing.price !== null && listing.price <= parseFloat(filters.priceRange!.max)
         )
       }
     }
 
     setFilteredListings(filtered)
-  }
+  }, [cachedListings])
 
   // Combined useEffect for search and category changes
   useEffect(() => {
@@ -117,9 +115,9 @@ export default function MarketplacePage() {
   // Separate useEffect for client-side filtering
   useEffect(() => {
     filterListings(searchQuery)
-  }, [searchQuery, cachedListings])
+  }, [searchQuery, filterListings])
 
-  const handleFiltersChange = async (filters: any) => {
+  const handleFiltersChange = async (filters: MarketplaceFilters) => {
     // Preserve category filter when applying other filters
     if (selectedCategory !== 'all') {
       filters = { ...filters, format: selectedCategory }

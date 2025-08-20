@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +49,7 @@ const getCardImageUrl = (imageUris: string | null | undefined): string => {
   }
 }
 
-function getCurrentPrice(prices: any): number {
+function getCurrentPrice(prices: { usd?: string; usd_foil?: string; [key: string]: string | undefined } | null): number {
   if (!prices || typeof prices !== 'object') return 0
   
   if (prices.usd) return parseFloat(prices.usd) || 0
@@ -93,17 +94,18 @@ export function WishlistCard({ item, onPriorityUpdate }: WishlistCardProps) {
     }
   }
 
-  const currentPrice = getCurrentPrice(item.default_cards.prices)
+  const currentPrice = getCurrentPrice(item.default_cards.prices || null)
   const maxPrice = item.max_price || 0
   const imageUrl = getCardImageUrl(item.default_cards.image_uris)
 
   return (
     <Card className="overflow-hidden">
       <div className="aspect-[3/4] relative">
-        <img
+        <Image
           src={imageUrl}
           alt={item.default_cards.name}
-          className="object-cover w-full h-full"
+          fill
+          className="object-cover"
         />
         <div className="absolute top-2 right-2">
           <DropdownMenu>

@@ -68,7 +68,7 @@ export async function GET(request: Request) {
         sale_price,
         condition,
         notes,
-        default_cards (
+        default_cards!user_cards_card_id_fkey (
           id,
           name,
           set_name,
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
           rarity,
           legalities
         ),
-        profiles (
+        profiles!user_cards_user_id_fkey (
           id,
           display_name,
           location_name,
@@ -153,13 +153,40 @@ export async function GET(request: Request) {
     const listings = await Promise.all(
       data
         .filter(listing => listing.profiles && listing.default_cards)
-        .map(async (listing: any) => {
+        .map(async (listing: {
+          id: string
+          user_id: string
+          is_for_sale: boolean
+          sale_price: number
+          condition: string
+          notes?: string
+          profiles: { display_name: string; id: string; location_name?: string; location_coordinates?: string } | null
+          default_cards: {
+            id: string
+            name: string
+            image_uris: string | null
+            set_name: string
+            rarity: string
+            colors?: string[]
+            mana_cost?: string
+            cmc?: number
+            legalities?: Record<string, string>
+          } | null
+        }) => {
           // Parse image_uris if it's a string
+          const defaultCard = listing.default_cards
+          const profile = listing.profiles
+
+          // Return null if either defaultCard or profile is missing
+          if (!defaultCard || !profile) {
+            return null
+          }
+
           let imageUris
           try {
-            imageUris = typeof listing.default_cards.image_uris === 'string'
-              ? JSON.parse(listing.default_cards.image_uris)
-              : listing.default_cards.image_uris
+            imageUris = typeof defaultCard.image_uris === 'string'
+              ? JSON.parse(defaultCard.image_uris)
+              : defaultCard.image_uris
           } catch (e) {
             console.error('Error parsing image_uris:', e)
             imageUris = null
@@ -167,11 +194,11 @@ export async function GET(request: Request) {
 
           // Calculate distance if both user and seller have coordinates
           let distance: number | undefined = undefined
-          if (userCoordinates && listing.profiles.location_coordinates) {
+          if (userCoordinates && profile.location_coordinates) {
             try {
               // Extract seller coordinates using PostGIS function
               const { data: sellerCoordsData } = await supabase
-                .rpc('get_coordinates', { point: listing.profiles.location_coordinates })
+                .rpc('get_coordinates', { point: profile.location_coordinates })
 
               if (sellerCoordsData && sellerCoordsData.length > 0) {
                 const sellerCoords = { lat: sellerCoordsData[0].lat, lng: sellerCoordsData[0].lng }
@@ -189,22 +216,25 @@ export async function GET(request: Request) {
 
           return {
             id: listing.id,
-            name: listing.default_cards.name,
-            set: listing.default_cards.set_name,
+            name: defaultCard.name,
+            set: defaultCard.set_name,
             condition: listing.condition,
             price: listing.sale_price,
-            seller: listing.profiles.display_name,
-            location: listing.profiles.location_name,
+            seller: profile.display_name,
+            location: profile.location_name,
             distance: distance,
             imageUrl: imageUris?.normal || imageUris?.large || null,
-            colors: listing.default_cards.colors,
-            cmc: listing.default_cards.cmc,
-            rarity: listing.default_cards.rarity
+            colors: defaultCard.colors,
+            cmc: defaultCard.cmc,
+            rarity: defaultCard.rarity
           }
         })
     )
 
-    return NextResponse.json(listings)
+    // Filter out null results
+    const validListings = listings.filter(listing => listing !== null)
+
+    return NextResponse.json(validListings)
   } catch (error) {
     console.error('Error in marketplace API route:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

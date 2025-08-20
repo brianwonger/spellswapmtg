@@ -24,10 +24,10 @@ type Profile = {
 
 export function Header() {
   const [profile, setProfile] = useState<Profile | null>(null)
-  const supabase = createClient()
 
   useEffect(() => {
     async function getProfile() {
+      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data } = await supabase

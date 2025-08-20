@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: 'cards.scryfall.io',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        pathname: '/**',
+      },
     ],
   },
 };
