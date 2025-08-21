@@ -17,6 +17,7 @@ import { CollectionContent } from "@/components/collection/collection-content"
 import { useEffect, useState } from "react"
 import { UserCard, Container } from '@/lib/types'
 import { FilterDialog, CardFilters } from "@/components/collection/filter-dialog"
+import { ViewMode, ViewToggle } from "@/components/ui/view-toggle"
 
 interface DatabaseUserCard {
   id: string
@@ -69,6 +70,24 @@ export default function CollectionPage() {
     foil: null,
     saleStatus: null
   })
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+
+  const handleViewChange = (newMode: ViewMode) => {
+    setViewMode(newMode)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('collectionViewMode', newMode)
+    }
+  }
+
+  // Initialize view mode from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMode = localStorage.getItem('collectionViewMode') as ViewMode
+      if (savedMode && (savedMode === 'grid' || savedMode === 'list')) {
+        setViewMode(savedMode)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -474,6 +493,9 @@ export default function CollectionPage() {
                 className="w-full"
               />
             </div>
+            <div className="flex items-center">
+              <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
+            </div>
             <div className="flex items-center gap-2">
               <ArrowUpDown className="w-4 h-4 text-muted-foreground" aria-label="Sort" />
               <Select value={sortBy} onValueChange={setSortBy}>
@@ -516,6 +538,7 @@ export default function CollectionPage() {
             availableContainers={availableContainers}
             onUpdateContainerItems={updateCardContainerItems}
             filters={filters}
+            viewMode={viewMode}
           />
         </div>
       </main>

@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useState, useRef, useEffect } from "react"
-import { ViewMode, ViewToggle } from "../ui/view-toggle"
+import { ViewMode } from "../ui/view-toggle"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
@@ -17,10 +17,11 @@ interface CollectionContentProps {
   sortBy?: string
   container?: string
   filters: CardFilters
+  viewMode: ViewMode
   onDeleteCard: (cardId: string) => Promise<boolean>
-  onUpdateCardStatus: (cardId: string, updates: { 
+  onUpdateCardStatus: (cardId: string, updates: {
     is_for_sale?: boolean
-    sale_price?: number | null 
+    sale_price?: number | null
   }) => Promise<boolean>
   onUpdateCard: (cardId: string, updates: {
     quantity: number
@@ -54,16 +55,7 @@ const getCardImageUrl = (imageUris: string | null): string => {
   }
 }
 
-const getInitialViewMode = (): ViewMode => {
-  if (typeof window === 'undefined') return 'grid'
-  return (localStorage.getItem('collectionViewMode') as ViewMode) || 'grid'
-}
 
-const saveViewMode = (mode: ViewMode) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('collectionViewMode', mode)
-  }
-}
 
 const getCardQuantity = (card: UserCard, selectedContainer: string) => {
   if (selectedContainer === "all") {
@@ -78,19 +70,19 @@ const getCardQuantity = (card: UserCard, selectedContainer: string) => {
   }
 }
 
-export function CollectionContent({ 
-  userCards, 
-  searchTerm = "", 
+export function CollectionContent({
+  userCards,
+  searchTerm = "",
   sortBy = "name",
   container = "all",
   filters,
+  viewMode,
   onDeleteCard,
   onUpdateCardStatus,
   onUpdateCard,
   availableContainers,
   onUpdateContainerItems
 }: CollectionContentProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode())
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [priceInput, setPriceInput] = useState<string>("")
   const [editingCard, setEditingCard] = useState<UserCard | null>(null)
@@ -461,37 +453,20 @@ export function CollectionContent({
     </div>
   )
 
-  // Update ViewToggle usage to save preference
-  const handleViewChange = (newMode: ViewMode) => {
-    setViewMode(newMode)
-    saveViewMode(newMode)
-  }
-
   // Show message when no cards match search/filters
   if (sortedCards.length === 0 && (searchTerm.trim() || Object.values(filters).some(v => v !== null && v !== ""))) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-end gap-2">
-          {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
-          <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
-        </div>
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-muted-foreground">No cards found</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Try adjusting your search terms or filters
-          </p>
-        </div>
+      <div className="text-center py-12">
+        <h3 className="text-lg font-medium text-muted-foreground">No cards found</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Try adjusting your search terms or filters
+        </p>
       </div>
     )
   }
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <ViewToggle currentView={viewMode} onViewChange={handleViewChange} />
-        {/* <FilterDialog filters={filters} onFiltersChange={setFilters} /> */}
-      </div>
-
       {viewMode === 'grid' ? <GridView /> : <ListView />}
 
       {editingCard && (
