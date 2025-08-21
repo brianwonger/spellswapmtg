@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Mail } from "lucide-react"
+import { Mail, ShoppingCart } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState } from "react"
 
@@ -53,6 +53,9 @@ export function Header() {
         </Link>
         <MainNav />
         <div className="flex items-center ml-auto space-x-4">
+          <Link href="/cart" className="text-muted-foreground hover:text-foreground transition-colors">
+            <ShoppingCart className="h-5 w-5" />
+          </Link>
           <Link href="/messages" className="text-muted-foreground hover:text-foreground transition-colors">
             <Mail className="h-5 w-5" />
           </Link>

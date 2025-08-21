@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, MapPin, ArrowLeft } from "lucide-react"
+import { Search, MapPin, ArrowLeft, ShoppingCart, Trash2 } from "lucide-react"
 import { MarketplaceListing } from "@/lib/types"
 import Image from "next/image"
 import Link from "next/link"
@@ -19,6 +19,9 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
   const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [addingToCart, setAddingToCart] = useState<string | null>(null)
+  const [removingFromCart, setRemovingFromCart] = useState<string | null>(null)
+  const [cartStatus, setCartStatus] = useState<Record<string, boolean>>({})
   const decodedSellerName = decodeURIComponent(sellerName)
 
   const loadSellerListings = useCallback(async () => {
@@ -45,6 +48,79 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
     }
   }, [decodedSellerName, searchQuery])
 
+  const loadCartStatus = useCallback(async (listingIds: string[]) => {
+    if (listingIds.length === 0) return
+
+    try {
+      const response = await fetch(`/api/cart/status?user_card_ids=${listingIds.join(',')}`)
+      if (response.ok) {
+        const status = await response.json()
+        setCartStatus(status)
+      }
+    } catch (error) {
+      console.error('Error loading cart status:', error)
+    }
+  }, [])
+
+  const handleAddToCart = async (listing: MarketplaceListing) => {
+    try {
+      setAddingToCart(listing.id)
+      
+      const response = await fetch('/api/cart/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_card_id: listing.id,
+          quantity: 1
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to add item to cart')
+      }
+
+      // Update cart status
+      setCartStatus(prev => ({ ...prev, [listing.id]: true }))
+      console.log('Item added to cart successfully')
+      
+    } catch (error) {
+      console.error('Error adding to cart:', error)
+    } finally {
+      setAddingToCart(null)
+    }
+  }
+
+  const handleRemoveFromCart = async (listing: MarketplaceListing) => {
+    try {
+      setRemovingFromCart(listing.id)
+      
+      const response = await fetch('/api/cart/remove', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_card_id: listing.id
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to remove item from cart')
+      }
+
+      // Update cart status
+      setCartStatus(prev => ({ ...prev, [listing.id]: false }))
+      console.log('Item removed from cart successfully')
+      
+    } catch (error) {
+      console.error('Error removing from cart:', error)
+    } finally {
+      setRemovingFromCart(null)
+    }
+  }
+
   // Load initial data and reload when search changes
   useEffect(() => {
     loadSellerListings()
@@ -58,6 +134,14 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
 
     return () => clearTimeout(timer)
   }, [searchQuery, loadSellerListings])
+
+  // Load cart status when listings change
+  useEffect(() => {
+    if (listings.length > 0) {
+      const listingIds = listings.map(listing => listing.id)
+      loadCartStatus(listingIds)
+    }
+  }, [listings, loadCartStatus])
 
   return (
     <div className="container py-8 space-y-6">
@@ -145,10 +229,10 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   />
                 </div>
-                <CardContent className="p-4">
+                <CardContent className="p-4 space-y-3">
                   <h3 className="font-semibold">{listing.name}</h3>
                   <p className="text-sm text-gray-500">{listing.set}</p>
-                  <div className="mt-2 flex items-center justify-between">
+                  <div className="flex items-center justify-between">
                     <div className="text-sm">
                       <span className="font-medium">${listing.price}</span> ·{" "}
                       <span className="text-gray-500">{listing.condition}</span>
@@ -160,6 +244,46 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
                       </div>
                     )}
                   </div>
+                  {cartStatus[listing.id] ? (
+                    <Button 
+                      onClick={() => handleRemoveFromCart(listing)}
+                      disabled={removingFromCart === listing.id}
+                      className="w-full"
+                      size="sm"
+                      variant="destructive"
+                    >
+                      {removingFromCart === listing.id ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          Removing...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Remove from Cart
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={() => handleAddToCart(listing)}
+                      disabled={addingToCart === listing.id}
+                      className="w-full"
+                      size="sm"
+                    >
+                      {addingToCart === listing.id ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4 mr-2" />
+                          Add to Cart
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}

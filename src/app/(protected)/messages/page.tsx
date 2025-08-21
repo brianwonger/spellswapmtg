@@ -1,55 +1,187 @@
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState, FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Send } from "lucide-react"
 import Image from "next/image"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
-// Mock data for initial development
-const mockConversations = [
-  {
-    id: 1,
-    user: "MTGDealer123",
-    avatar: "https://placehold.co/40",
-    lastMessage: "Would you take $100 for the Jace?",
-    timestamp: "2 hours ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    user: "CardCollector",
-    avatar: "https://placehold.co/40",
-    lastMessage: "I can meet tomorrow at the card shop",
-    timestamp: "1 day ago",
-    unread: false,
-  },
-  // Add more mock conversations as needed
-]
+// Define types for our data
+type Profile = {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+}
 
-const mockMessages = [
-  {
-    id: 1,
-    sender: "MTGDealer123",
-    content: "Hi, I'm interested in your Jace, the Mind Sculptor",
-    timestamp: "3 hours ago",
-    isSender: false,
-  },
-  {
-    id: 2,
-    sender: "You",
-    content: "Hello! Yes, it's still available. I'm asking $120",
-    timestamp: "3 hours ago",
-    isSender: true,
-  },
-  {
-    id: 3,
-    sender: "MTGDealer123",
-    content: "Would you take $100 for the Jace?",
-    timestamp: "2 hours ago",
-    isSender: false,
-  },
-  // Add more mock messages as needed
-]
+type Conversation = {
+  id: string;
+  other_participant: Profile;
+  last_message: string | null;
+  last_message_at: string;
+  unread_count: number;
+  transaction_id: string | null;
+}
+
+type Message = {
+    id: string;
+    content: string;
+    created_at: string;
+    sender_id: string;
+}
+
+type TransactionItem = {
+    id: string;
+    agreed_price: number;
+    condition: string;
+    user_cards: {
+        default_cards: {
+            name: string;
+            image_uris: any;
+        }
+    }
+}
+
+const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
 export default function MessagesPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [transactionItems, setTransactionItems] = useState<TransactionItem[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setUserId(user.id)
+
+      // Fetch conversations where the user is a participant
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          last_message_at,
+          transaction_id,
+          participant1:profiles!conversations_participant1_id_fkey(id, display_name, avatar_url),
+          participant2:profiles!conversations_participant2_id_fkey(id, display_name, avatar_url)
+        `)
+        .or(`participant1_id.eq.${user.id},participant2_id.eq.${user.id}`);
+
+      if (error) {
+        console.error("Error fetching conversations:", error);
+        setIsLoading(false);
+        return;
+      }
+      
+      const formattedConversations: Conversation[] = data.map((conv: any) => {
+          const otherParticipant = conv.participant1.id === user.id ? conv.participant2 : conv.participant1;
+          return {
+              id: conv.id,
+              other_participant: otherParticipant,
+              last_message: "Last message placeholder...", // TODO: Fetch last message
+              last_message_at: conv.last_message_at,
+              unread_count: 0, // TODO: Implement unread count
+              transaction_id: conv.transaction_id,
+          }
+      }).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+
+
+      setConversations(formattedConversations);
+      if (formattedConversations.length > 0) {
+        setSelectedConversation(formattedConversations[0]);
+      }
+      setIsLoading(false);
+    };
+
+    fetchConversations();
+  }, [router]);
+
+  useEffect(() => {
+    const fetchMessagesAndItems = async () => {
+        if (!selectedConversation) return;
+
+        const supabase = createClient();
+
+        // Fetch messages
+        const { data: messagesData, error: messagesError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', selectedConversation.id)
+            .order('created_at', { ascending: true });
+
+        if (messagesError) {
+            console.error("Error fetching messages:", messagesError);
+        } else {
+            setMessages(messagesData);
+        }
+        
+        // Fetch transaction items
+        if (selectedConversation.transaction_id) {
+            const { data: itemsData, error: itemsError } = await supabase
+                .from('transaction_items')
+                .select(`
+                    id,
+                    agreed_price,
+                    condition,
+                    user_cards (
+                        default_cards (
+                            name,
+                            image_uris
+                        )
+                    )
+                `)
+                .eq('transaction_id', selectedConversation.transaction_id);
+            
+            if(itemsError) {
+                console.error("Error fetching transaction items:", itemsError);
+            } else {
+                setTransactionItems(itemsData);
+            }
+        } else {
+            setTransactionItems([]);
+        }
+    };
+
+    fetchMessagesAndItems();
+
+  }, [selectedConversation]);
+  
+  const handleSendMessage = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !selectedConversation || !userId) return;
+
+    const supabase = createClient();
+
+    const { error } = await supabase
+        .from('messages')
+        .insert({
+            conversation_id: selectedConversation.id,
+            sender_id: userId,
+            content: newMessage.trim(),
+        });
+
+    if (error) {
+        console.error("Error sending message:", error);
+    } else {
+        // Optimistically update UI
+        setMessages(prev => [...prev, { id: Math.random().toString(), content: newMessage.trim(), created_at: new Date().toISOString(), sender_id: userId }]);
+        setNewMessage("");
+    }
+  };
+
   return (
     <div className="container py-8">
       <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -63,91 +195,137 @@ export default function MessagesPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {mockConversations.map((conversation) => (
+            {isLoading ? (
+                <div className="p-4 text-center">Loading conversations...</div>
+            ) : (
+              conversations.map((conversation) => (
               <div
                 key={conversation.id}
                 className={`p-4 border-b hover:bg-accent cursor-pointer ${
-                  conversation.id === 1 ? "bg-accent" : ""
+                  selectedConversation?.id === conversation.id ? "bg-accent" : ""
                 }`}
+                onClick={() => setSelectedConversation(conversation)}
               >
                 <div className="flex items-center gap-3">
                   <Image
-                    src={conversation.avatar}
-                    alt={conversation.user}
+                    src={conversation.other_participant.avatar_url || "https://placehold.co/40"}
+                    alt={conversation.other_participant.display_name}
                     width={40}
                     height={40}
                     className="rounded-full"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">{conversation.user}</p>
+                      <p className="font-medium truncate">{conversation.other_participant.display_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {conversation.timestamp}
+                        {new Date(conversation.last_message_at).toLocaleTimeString()}
                       </p>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">
-                      {conversation.lastMessage}
+                      {conversation.last_message}
                     </p>
                   </div>
-                  {conversation.unread && (
+                  {conversation.unread_count > 0 && (
                     <div className="w-2 h-2 bg-blue-500 rounded-full" />
                   )}
                 </div>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col border rounded-lg">
-          <div className="p-4 border-b">
-            <div className="flex items-center gap-3">
-              <Image
-                src="https://placehold.co/40"
-                alt="MTGDealer123"
-                width={40}
-                height={40}
-                className="rounded-full"
-              />
-              <div>
-                <h2 className="font-semibold">MTGDealer123</h2>
-                <p className="text-sm text-muted-foreground">Online</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {mockMessages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.isSender ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[70%] rounded-lg p-3 ${
-                    message.isSender
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                  <p className="text-xs mt-1 opacity-70">
-                    {message.timestamp}
-                  </p>
+        {/* Chat Area & Transaction Details */}
+        <div className="flex-1 flex flex-col gap-4">
+            <div className="flex-1 flex flex-col border rounded-lg">
+            {selectedConversation ? (
+              <>
+                <div className="p-4 border-b">
+                  <div className="flex items-center gap-3">
+                    <Image
+                      src={selectedConversation.other_participant.avatar_url || "https://placehold.co/40"}
+                      alt={selectedConversation.other_participant.display_name}
+                      width={40}
+                      height={40}
+                      className="rounded-full"
+                    />
+                    <div>
+                      <h2 className="font-semibold">{selectedConversation.other_participant.display_name}</h2>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${
+                        message.sender_id === userId ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[70%] rounded-lg p-3 ${
+                            message.sender_id === userId
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                        <p className="text-xs mt-1 opacity-70">
+                            {new Date(message.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-          <div className="p-4 border-t">
-            <form className="flex gap-2">
-              <Input placeholder="Type a message..." className="flex-1" />
-              <Button type="submit" size="icon">
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-          </div>
+                <div className="p-4 border-t">
+                  <form className="flex gap-2" onSubmit={handleSendMessage}>
+                    <Input placeholder="Type a message..." className="flex-1" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+                    <Button type="submit" size="icon">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-muted-foreground">Select a conversation to start chatting.</p>
+              </div>
+            )}
+            </div>
+
+            {transactionItems.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Items in this Conversation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Accordion type="single" collapsible>
+                            <AccordionItem value="items">
+                                <AccordionTrigger>{transactionItems.length} items</AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-4">
+                                        {transactionItems.map(item => (
+                                            <div key={item.id}>
+                                                <Image 
+                                                    src={item.user_cards.default_cards.image_uris?.art_crop || FALLBACK_CARD_IMAGE} 
+                                                    alt={item.user_cards.default_cards.name}
+                                                    width={100}
+                                                    height={140}
+                                                    className="rounded-lg"
+                                                />
+                                                <p className="text-sm font-medium mt-1">{item.user_cards.default_cards.name}</p>
+                                                <p className="text-xs text-muted-foreground">${item.agreed_price.toFixed(2)}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </CardContent>
+                </Card>
+            )}
         </div>
       </div>
     </div>

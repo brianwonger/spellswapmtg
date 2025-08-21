@@ -34,6 +34,8 @@ export default function MarketplacePage() {
   }>({ key: null, direction: 'asc' })
   const [wishlistFilter, setWishlistFilter] = useState<'all' | 'wishlist' | 'priority'>('all')
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
+  const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
+
 
   const handleViewChange = (newMode: ViewMode) => {
     setViewMode(newMode)
@@ -41,6 +43,35 @@ export default function MarketplacePage() {
       localStorage.setItem('marketplaceViewMode', newMode)
     }
   }
+
+  const handleAddToCart = async (user_card_id: string) => {
+    setIsAddingToCart(user_card_id);
+    try {
+      const response = await fetch('/api/cart/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_card_id }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to add card to cart.');
+      }
+
+      // Here you might want to show a success toast/notification
+      console.log('Card added to cart:', result);
+
+    } catch (error) {
+      // Here you might want to show an error toast/notification
+      console.error('Error adding to cart:', error);
+    } finally {
+      setIsAddingToCart(null);
+    }
+  };
+
 
   // Initialize view mode from localStorage
   useEffect(() => {
@@ -397,6 +428,13 @@ export default function MarketplacePage() {
                       {listing.seller}
                     </Link>
                   </p>
+                  <Button 
+                    className="w-full mt-4" 
+                    onClick={() => handleAddToCart(listing.id)}
+                    disabled={isAddingToCart === listing.id}
+                  >
+                    {isAddingToCart === listing.id ? 'Adding...' : 'Add to Cart'}
+                  </Button>
                 </CardContent>
               </Card>
             ))
@@ -461,6 +499,7 @@ export default function MarketplacePage() {
                     {getSortIcon('seller')}
                   </button>
                 </th>
+                <th className="py-2 px-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -483,7 +522,7 @@ export default function MarketplacePage() {
                 ))
               ) : filterListingsByWishlist(listings).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12">
+                  <td colSpan={7} className="text-center py-12">
                     <p className="text-gray-500">
                       {wishlistFilter !== 'all'
                         ? wishlistFilter === 'wishlist'
@@ -532,6 +571,15 @@ export default function MarketplacePage() {
                       >
                         {listing.seller}
                       </Link>
+                    </td>
+                    <td className="py-3 px-3">
+                      <Button 
+                        size="sm"
+                        onClick={() => handleAddToCart(listing.id)}
+                        disabled={isAddingToCart === listing.id}
+                      >
+                        {isAddingToCart === listing.id ? 'Adding...' : 'Add'}
+                      </Button>
                     </td>
                   </tr>
                 ))
