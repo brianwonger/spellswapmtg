@@ -1,11 +1,11 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useState, FormEvent, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Send } from "lucide-react"
+import { Search, Send, Check, CheckCheck, Clock } from "lucide-react"
 import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
@@ -31,7 +31,10 @@ type Message = {
     content: string;
     created_at: string;
     sender_id: string;
+    is_read?: boolean;
 }
+
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 type TransactionItem = {
     id: string;
@@ -55,7 +58,30 @@ export default function MessagesPage() {
   const [newMessage, setNewMessage] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
   const router = useRouter();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Helper function to render message status icon
+  const renderMessageStatus = (messageId: string) => {
+    const status = messageStatuses[messageId] || 'delivered';
+    const isOwnMessage = messages.find(m => m.id === messageId)?.sender_id === userId;
+
+    if (!isOwnMessage) return null;
+
+    switch (status) {
+      case 'sending':
+        return <Clock className="h-3 w-3 text-muted-foreground" />;
+      case 'sent':
+        return <Check className="h-3 w-3 text-muted-foreground" />;
+      case 'delivered':
+        return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+      case 'read':
+        return <CheckCheck className="h-3 w-3 text-blue-500" />;
+      default:
+        return null;
+    }
+  };
 
   useEffect(() => {
     const fetchConversations = async () => {
@@ -127,7 +153,7 @@ export default function MessagesPage() {
         } else {
             setMessages(messagesData);
         }
-        
+
         // Fetch transaction items
         if (selectedConversation.transaction_id) {
             const { data: itemsData, error: itemsError } = await supabase
@@ -144,7 +170,7 @@ export default function MessagesPage() {
                     )
                 `)
                 .eq('transaction_id', selectedConversation.transaction_id);
-            
+
             if(itemsError) {
                 console.error("Error fetching transaction items:", itemsError);
             } else {
@@ -158,27 +184,170 @@ export default function MessagesPage() {
     fetchMessagesAndItems();
 
   }, [selectedConversation]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Real-time subscription for messages
+  useEffect(() => {
+    if (!selectedConversation || !userId) return;
+
+    const supabase = createClient();
+
+    // Set up real-time subscription for new messages in this conversation
+    console.log('Setting up real-time subscription for conversation:', selectedConversation.id);
+
+    const channel = supabase
+      .channel(`messages_${selectedConversation.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${selectedConversation.id}`,
+        },
+        (payload) => {
+          console.log('New message received via real-time:', payload);
+          const newMessage = payload.new as Message;
+
+          // Only add message if it's not from the current user (to avoid duplicates)
+          if (newMessage.sender_id !== userId) {
+            setMessages(prev => {
+              // Check if message already exists to prevent duplicates
+              const messageExists = prev.some(msg => msg.id === newMessage.id);
+              if (!messageExists) {
+                // Add visual feedback for new messages
+                if (document.hidden) {
+                  // Browser tab is not active, could show notification
+                  console.log('New message while tab inactive:', newMessage.content);
+                }
+
+                const updatedMessages = [...prev, newMessage].sort((a, b) =>
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                );
+
+                return updatedMessages;
+              }
+              return prev;
+            });
+
+            // Mark message as delivered for the sender
+            setMessageStatuses(prev => ({ ...prev, [newMessage.id]: 'delivered' }));
+          }
+
+          // Update conversation's last_message_at
+          setConversations(prev =>
+            prev.map(conv =>
+              conv.id === selectedConversation.id
+                ? { ...conv, last_message_at: newMessage.created_at }
+                : conv
+            )
+          );
+        }
+      )
+      .subscribe((status) => {
+        console.log('Real-time subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time updates for conversation:', selectedConversation.id);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Error subscribing to real-time updates');
+        }
+      });
+
+    // Cleanup function
+    return () => {
+      console.log('Unsubscribing from messages channel');
+      supabase.removeChannel(channel);
+    };
+  }, [selectedConversation, userId]);
   
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation || !userId) return;
 
     const supabase = createClient();
+    const messageContent = newMessage.trim();
+    const tempMessageId = Math.random().toString();
 
-    const { error } = await supabase
+    // Optimistically update UI immediately with sending status
+    const optimisticMessage = {
+      id: tempMessageId,
+      content: messageContent,
+      created_at: new Date().toISOString(),
+      sender_id: userId
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    setMessageStatuses(prev => ({ ...prev, [tempMessageId]: 'sending' }));
+    setNewMessage("");
+
+    try {
+      // Insert message and update conversation timestamp in a transaction-like approach
+      const { data: insertedMessage, error: messageError } = await supabase
         .from('messages')
         .insert({
             conversation_id: selectedConversation.id,
             sender_id: userId,
-            content: newMessage.trim(),
-        });
+            content: messageContent,
+        })
+        .select()
+        .single();
 
-    if (error) {
-        console.error("Error sending message:", error);
-    } else {
-        // Optimistically update UI
-        setMessages(prev => [...prev, { id: Math.random().toString(), content: newMessage.trim(), created_at: new Date().toISOString(), sender_id: userId }]);
-        setNewMessage("");
+      if (messageError || !insertedMessage) {
+        console.error("Error sending message:", messageError);
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
+        setMessageStatuses(prev => {
+          const newStatuses = { ...prev };
+          delete newStatuses[tempMessageId];
+          return newStatuses;
+        });
+        setNewMessage(messageContent); // Restore message content
+        return;
+      }
+
+      // Replace optimistic message with real message
+      setMessages(prev => prev.map(msg =>
+        msg.id === tempMessageId ? insertedMessage : msg
+      ));
+      setMessageStatuses(prev => ({ ...prev, [insertedMessage.id]: 'sent' }));
+
+      // Update conversation's last_message_at
+      const { error: conversationError } = await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', selectedConversation.id);
+
+      if (conversationError) {
+        console.error("Error updating conversation timestamp:", conversationError);
+      }
+
+      // Update local conversation state
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, last_message_at: new Date().toISOString() }
+            : conv
+        )
+      );
+
+      // Update message status to delivered after a short delay
+      setTimeout(() => {
+        setMessageStatuses(prev => ({ ...prev, [insertedMessage.id]: 'delivered' }));
+      }, 1000);
+
+    } catch (error) {
+      console.error("Error in handleSendMessage:", error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
+      setMessageStatuses(prev => {
+        const newStatuses = { ...prev };
+        delete newStatuses[tempMessageId];
+        return newStatuses;
+      });
+      setNewMessage(messageContent); // Restore message content
     }
   };
 
@@ -255,7 +424,9 @@ export default function MessagesPage() {
                   </div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div
+                  className="flex-1 overflow-y-auto p-4 space-y-4"
+                >
                   {messages.map((message) => (
                     <div
                       key={message.id}
@@ -270,13 +441,17 @@ export default function MessagesPage() {
                             : "bg-muted"
                         }`}
                       >
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs mt-1 opacity-70">
-                            {new Date(message.created_at).toLocaleTimeString()}
-                        </p>
+                        <p className="text-sm break-words">{message.content}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-xs opacity-70">
+                              {new Date(message.created_at).toLocaleTimeString()}
+                          </p>
+                          {renderMessageStatus(message.id)}
+                        </div>
                       </div>
                     </div>
                   ))}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 <div className="p-4 border-t">

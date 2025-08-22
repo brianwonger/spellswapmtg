@@ -350,8 +350,26 @@ CREATE POLICY "Users can manage their own wishlist" ON wishlist_items FOR ALL US
 CREATE POLICY "Users can view transactions they're involved in" ON transactions 
   FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
 
-CREATE POLICY "Users can view their own messages" ON messages 
+CREATE POLICY "Users can view their own messages" ON messages
   FOR SELECT USING (
+    auth.uid() IN (
+      SELECT participant1_id FROM conversations WHERE id = conversation_id
+      UNION
+      SELECT participant2_id FROM conversations WHERE id = conversation_id
+    )
+  );
+
+CREATE POLICY "Users can insert messages in their conversations" ON messages
+  FOR INSERT WITH CHECK (
+    auth.uid() IN (
+      SELECT participant1_id FROM conversations WHERE id = conversation_id
+      UNION
+      SELECT participant2_id FROM conversations WHERE id = conversation_id
+    )
+  );
+
+CREATE POLICY "Users can update messages in their conversations" ON messages
+  FOR UPDATE USING (
     auth.uid() IN (
       SELECT participant1_id FROM conversations WHERE id = conversation_id
       UNION
