@@ -15,6 +15,70 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Mail, ShoppingCart } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
+
+// Debug utility to test avatar URL
+const testAvatarUrl = (url: string) => {
+  if (!url) return Promise.resolve({ status: 'empty' })
+
+  return fetch(url, { method: 'HEAD' })
+    .then(response => ({ status: response.ok ? 'success' : 'error', statusCode: response.status }))
+    .catch(error => ({ status: 'network-error', error: error.message }))
+}
+
+// Debug utility to test avatars bucket
+const testAvatarsBucket = async (supabase: any) => {
+  try {
+    const { data, error } = await supabase.storage.listBuckets()
+    if (error) {
+      console.log('Header: Error listing buckets:', error)
+      return { status: 'error', error: error.message }
+    }
+
+    const avatarsBucket = data.find((bucket: any) => bucket.name === 'avatars')
+    if (!avatarsBucket) {
+      console.log('Header: Avatars bucket not found')
+      return { status: 'bucket-not-found', buckets: data.map((b: any) => b.name) }
+    }
+
+    console.log('Header: Avatars bucket found:', avatarsBucket)
+    return { status: 'bucket-found', bucket: avatarsBucket }
+  } catch (error) {
+    console.log('Header: Error testing avatars bucket:', error)
+    return { status: 'error', error: error.message }
+  }
+}
+
+// Utility to fix avatar URL issues
+const fixAvatarUrl = async (supabase: any, userId: string, currentAvatarUrl: string | null) => {
+  if (!currentAvatarUrl) {
+    console.log('Header: No avatar URL to fix')
+    return null
+  }
+
+  try {
+    // Extract the file path from the URL
+    const url = new URL(currentAvatarUrl)
+    const pathParts = url.pathname.split('/')
+    const fileName = pathParts[pathParts.length - 1]
+
+    if (!fileName) {
+      console.log('Header: Could not extract filename from avatar URL')
+      return null
+    }
+
+    // Try to get the public URL for the file
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(`${userId}/${fileName}`)
+
+    console.log('Header: Fixed avatar URL:', publicUrl)
+    return publicUrl
+  } catch (error) {
+    console.log('Header: Error fixing avatar URL:', error)
+    return null
+  }
+}
 
 type Profile = {
   username: string
@@ -28,15 +92,41 @@ export function Header() {
   useEffect(() => {
     async function getProfile() {
       const supabase = createClient()
+
+      // Test avatars bucket first (for debugging)
+      const bucketTest = await testAvatarsBucket(supabase)
+
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('username, email, avatar_url')
           .eq('id', user.id)
           .single()
-        
+
+
+
         if (data) {
+          // Test and potentially fix the avatar URL
+          if (data.avatar_url) {
+            const testResult = await testAvatarUrl(data.avatar_url)
+
+            if (testResult.status !== 'success') {
+              const fixedUrl = await fixAvatarUrl(supabase, user.id, data.avatar_url)
+
+              if (fixedUrl && fixedUrl !== data.avatar_url) {
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ avatar_url: fixedUrl })
+                  .eq('id', user.id)
+
+                if (!updateError) {
+                  data.avatar_url = fixedUrl
+                }
+              }
+            }
+          }
+
           setProfile(data)
         }
       }
@@ -63,8 +153,13 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={profile?.avatar_url || ""} alt={profile?.username || 'User'} />
-                  <AvatarFallback>{profile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                  <AvatarImage
+                    src={profile?.avatar_url || ""}
+                    alt={profile?.username || 'User'}
+                  />
+                  <AvatarFallback>
+                    {profile?.username?.[0]?.toUpperCase() || 'U'}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>

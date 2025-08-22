@@ -20,6 +20,7 @@ type Profile = {
   location_lat: number | null
   location_lng: number | null
   created_at: string
+  avatar_url: string | null
   user_ratings: UserRating | null
 }
 
@@ -33,6 +34,7 @@ type DatabaseProfile = {
   location_lat: number | null
   location_lng: number | null
   created_at: string
+  avatar_url: string | null
   user_ratings: UserRating[] | null
 }
 
@@ -60,6 +62,7 @@ export default async function ProfilePage() {
       location_name,
       location_coordinates,
       created_at,
+      avatar_url,
       user_ratings (
         total_reviews,
         average_rating,
@@ -116,6 +119,7 @@ export default async function ProfilePage() {
       location_lat: null,
       location_lng: null,
       created_at: new Date().toISOString(),
+      avatar_url: null
     };
 
     const { data: newProfile, error: createError } = await supabase
@@ -167,6 +171,7 @@ export default async function ProfilePage() {
     location_lat: profileData.location_lat,
     location_lng: profileData.location_lng,
     created_at: profileData.created_at,
+    avatar_url: profileData.avatar_url,
     user_ratings: profileData.user_ratings?.[0] || null
   };
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -9,8 +9,7 @@ import { MapPin, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import dynamic from 'next/dynamic'
-import 'leaflet/dist/leaflet.css'
-import L from 'leaflet'
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // Dynamically import map components with no SSR
 const MapContainer = dynamic(
@@ -44,12 +43,16 @@ type Profile = {
   location_lat: number | null
   location_lng: number | null
   created_at: string
+  avatar_url: string | null
 }
 
 export function UserInfoCard({ profile }: { profile: Profile }) {
   const [locationName, setLocationName] = useState(profile.location_name || '')
   const [username, setUsername] = useState(profile.username || '')
   const [displayName, setDisplayName] = useState(profile.display_name || '')
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url || '')
+  const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [coordinates, setCoordinates] = useState<Coordinates>(() => {
     if (profile.location_lat !== null && profile.location_lng !== null) {
       return {
@@ -62,26 +65,110 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [mapKey, setMapKey] = useState(0)
-  const [markerIcon, setMarkerIcon] = useState<L.Icon | null>(null)
+  const [markerIcon, setMarkerIcon] = useState<any>(null)
   const supabase = createClient()
 
-  // Initialize Leaflet icon on client side
+  // Initialize Leaflet icon and CSS on client side
   useEffect(() => {
-    setMarkerIcon(L.icon({
-      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41]
-    }))
+    const initLeaflet = async () => {
+      // Dynamically import Leaflet CSS and L object
+      await import('leaflet/dist/leaflet.css')
+      const L = await import('leaflet')
+
+      setMarkerIcon(L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }))
+    }
+
+    initLeaflet()
   }, [])
 
   // Update map when coordinates change
   useEffect(() => {
     setMapKey(prev => prev + 1)
   }, [coordinates])
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const allowedTypes = ['image/jpeg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Only JPG and PNG images are allowed.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB")
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("User not found")
+
+      const filePath = `${user.id}/${Date.now()}-${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      if (!publicUrl) throw new Error("Could not get public URL")
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
+
+      if (dbError) throw dbError
+
+      setAvatarUrl(publicUrl)
+      toast.success("Profile picture updated")
+    } catch (error) {
+      console.error("Error uploading avatar:", error)
+      toast.error("Failed to upload profile picture. Please try again.")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const removeAvatar = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("User not found")
+
+      // Optional: Delete from storage
+      if (avatarUrl) {
+        const path = new URL(avatarUrl).pathname.split('/avatars/')[1]
+        await supabase.storage.from('avatars').remove([path])
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', user.id)
+
+      if (error) throw error
+
+      setAvatarUrl('')
+      toast.success("Profile picture removed")
+    } catch (error) {
+      console.error("Error removing avatar:", error)
+      toast.error("Failed to remove profile picture. Please try again.")
+    }
+  }
 
   const updateLocation = async () => {
     setIsUpdatingLocation(true)
@@ -154,6 +241,47 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
         <CardTitle>User Information</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex flex-col items-center gap-4">
+          <Avatar className="h-24 w-24">
+            <AvatarImage src={avatarUrl} alt={displayName || username} />
+            <AvatarFallback>
+              {displayName?.[0] || username?.[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                'Change Photo'
+              )}
+            </Button>
+            <Input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleAvatarUpload}
+              className="hidden"
+              accept="image/png, image/jpeg"
+            />
+            {avatarUrl && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={removeAvatar}
+              >
+                Remove Photo
+              </Button>
+            )}
+          </div>
+        </div>
         <div className="space-y-2">
           <Label>Username</Label>
           <Input 
