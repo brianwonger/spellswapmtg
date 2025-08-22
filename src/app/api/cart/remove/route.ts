@@ -19,71 +19,70 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    // 1. Get seller_id from the user_card to find the right transaction
-    const { data: cardData, error: cardError } = await supabase
-      .from('user_cards')
-      .select('user_id')
-      .eq('id', user_card_id)
+    // Find the specific transaction item to delete that belongs to the user in a pending transaction
+    const { data: transactionItem, error: findError } = await supabase
+      .from('transaction_items')
+      .select(`
+        id,
+        transaction_id,
+        transactions!inner(id)
+      `)
+      .eq('user_card_id', user_card_id)
+      .eq('transactions.buyer_id', user.id)
+      .eq('transactions.status', 'pending')
       .single()
 
-    if (cardError || !cardData) {
-      console.error('Error fetching card data:', cardError)
-      return NextResponse.json({ error: 'Card not found or error fetching data.' }, { status: 404 })
+    if (findError || !transactionItem) {
+      console.error('Error finding item in cart, or item does not exist:', findError)
+      return NextResponse.json({ error: 'Item not found in a pending transaction for this user.' }, { status: 404 })
     }
 
-    const seller_id = cardData.user_id
+    const transactionId = transactionItem.transaction_id;
 
-    // 2. Find the pending transaction between buyer and seller
-    const { data: transaction, error: transactionError } = await supabase
-      .from('transactions')
-      .select('id')
-      .eq('buyer_id', user.id)
-      .eq('seller_id', seller_id)
-      .eq('status', 'pending')
-      .single()
-
-    if (transactionError || !transaction) {
-      return NextResponse.json({ error: 'No pending transaction found for this seller.' }, { status: 404 })
+    if (!transactionId) {
+      return NextResponse.json({ error: 'Could not determine transaction ID.' }, { status: 500 })
     }
 
-    // 3. Remove the item from transaction_items
-    const { error: removeError } = await supabase
+    // We found the item, now delete it by its primary key
+    const { error: deleteError } = await supabase
       .from('transaction_items')
       .delete()
-      .eq('transaction_id', transaction.id)
-      .eq('user_card_id', user_card_id)
+      .eq('id', transactionItem.id)
 
-    if (removeError) {
-      console.error('Error removing item from transaction:', removeError)
-      throw new Error('Could not remove item from cart.')
+    if (deleteError) {
+      console.error('Error deleting transaction item:', deleteError)
+      return NextResponse.json({ error: 'Failed to remove item from cart.' }, { status: 500 })
     }
 
-    // 4. Check if the transaction has any remaining items
+    // Check if the transaction is now empty and delete it if so
     const { data: remainingItems, error: countError } = await supabase
       .from('transaction_items')
       .select('id')
-      .eq('transaction_id', transaction.id)
+      .eq('transaction_id', transactionId)
+      .limit(1)
 
     if (countError) {
-      console.error('Error checking remaining items:', countError)
-      // Don't fail the operation if we can't check remaining items
+      // Log the error but don't block the response
+      console.error('Error checking for remaining items:', countError)
     }
 
-    // 5. If no items remain, delete the empty transaction
+    // If no items remain, delete the parent transaction
     if (remainingItems && remainingItems.length === 0) {
       const { error: deleteTransactionError } = await supabase
         .from('transactions')
         .delete()
-        .eq('id', transaction.id)
+        .eq('id', transactionId)
 
       if (deleteTransactionError) {
+        // Log the error but don't block the response
         console.error('Error deleting empty transaction:', deleteTransactionError)
-        // Don't fail the operation if we can't delete the empty transaction
       }
     }
 
     return NextResponse.json({ message: 'Item removed from cart successfully.' }, { status: 200 })
+
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'An unexpected error occurred.' }, { status: 500 })
+    console.error('Remove from cart error:', error)
+    return NextResponse.json({ error: 'An unexpected server error occurred.' }, { status: 500 })
   }
 }

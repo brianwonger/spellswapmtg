@@ -19,7 +19,13 @@ type CartItem = {
     default_cards: {
       name: string;
       set_name: string;
-      image_uris: any;
+      image_uris: {
+        normal?: string;
+        small?: string;
+        large?: string;
+        art_crop?: string;
+        border_crop?: string;
+      } | null;
     }
   }
 }
@@ -86,7 +92,32 @@ export default function CartPage() {
           if (!acc[sellerId]) {
             acc[sellerId] = { id: tx.id, seller_id: sellerId, seller_name: sellerName, transaction_items: [] };
           }
-          acc[sellerId].transaction_items.push(...tx.transaction_items);
+
+          // Parse image_uris for each transaction item
+          const processedItems = tx.transaction_items.map((item: any) => {
+            let imageUris;
+            try {
+              imageUris = typeof item.user_cards.default_cards.image_uris === 'string'
+                ? JSON.parse(item.user_cards.default_cards.image_uris)
+                : item.user_cards.default_cards.image_uris;
+            } catch (e) {
+              console.error('Error parsing image_uris:', e);
+              imageUris = null;
+            }
+
+            return {
+              ...item,
+              user_cards: {
+                ...item.user_cards,
+                default_cards: {
+                  ...item.user_cards.default_cards,
+                  image_uris: imageUris
+                }
+              }
+            };
+          });
+
+          acc[sellerId].transaction_items.push(...processedItems);
           return acc;
         }, {});
         setGroupedBySeller(grouped)
@@ -150,7 +181,7 @@ export default function CartPage() {
                   {transaction.transaction_items.map((item) => (
                     <li key={item.id} className="flex items-center gap-4">
                       <Image
-                        src={item.user_cards.default_cards.image_uris?.art_crop || FALLBACK_CARD_IMAGE}
+                        src={item.user_cards.default_cards.image_uris?.normal || FALLBACK_CARD_IMAGE}
                         alt={item.user_cards.default_cards.name}
                         width={64}
                         height={64}

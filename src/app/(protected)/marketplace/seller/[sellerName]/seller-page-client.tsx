@@ -95,7 +95,7 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
   const handleRemoveFromCart = async (listing: MarketplaceListing) => {
     try {
       setRemovingFromCart(listing.id)
-      
+
       const response = await fetch('/api/cart/remove', {
         method: 'DELETE',
         headers: {
@@ -107,15 +107,20 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
       })
 
       if (!response.ok) {
-        throw new Error('Failed to remove item from cart')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to remove item from cart (${response.status})`)
       }
 
       // Update cart status
       setCartStatus(prev => ({ ...prev, [listing.id]: false }))
       console.log('Item removed from cart successfully')
-      
+
     } catch (error) {
       console.error('Error removing from cart:', error)
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove item from cart'
+      alert(`Error: ${errorMessage}`)
     } finally {
       setRemovingFromCart(null)
     }
