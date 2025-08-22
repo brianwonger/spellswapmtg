@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Send, Check, CheckCheck, Clock } from "lucide-react"
-import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 // Define types for our data
 type Profile = {
@@ -376,13 +376,15 @@ export default function MessagesPage() {
                 onClick={() => setSelectedConversation(conversation)}
               >
                 <div className="flex items-center gap-3">
-                  <Image
-                    src={conversation.other_participant.avatar_url || "https://placehold.co/40"}
-                    alt={conversation.other_participant.display_name}
-                    width={40}
-                    height={40}
-                    className="rounded-full"
-                  />
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage
+                      src={conversation.other_participant.avatar_url || ""}
+                      alt={conversation.other_participant.display_name}
+                    />
+                    <AvatarFallback>
+                      {conversation.other_participant.display_name?.[0]?.toUpperCase() || '?'}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="font-medium truncate">{conversation.other_participant.display_name}</p>
@@ -411,13 +413,15 @@ export default function MessagesPage() {
               <>
                 <div className="p-4 border-b">
                   <div className="flex items-center gap-3">
-                    <Image
-                      src={selectedConversation.other_participant.avatar_url || "https://placehold.co/40"}
-                      alt={selectedConversation.other_participant.display_name}
-                      width={40}
-                      height={40}
-                      className="rounded-full"
-                    />
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={selectedConversation.other_participant.avatar_url || ""}
+                        alt={selectedConversation.other_participant.display_name}
+                      />
+                      <AvatarFallback>
+                        {selectedConversation.other_participant.display_name?.[0]?.toUpperCase() || '?'}
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
                       <h2 className="font-semibold">{selectedConversation.other_participant.display_name}</h2>
                     </div>
