@@ -19,6 +19,7 @@ import { ViewMode, ViewToggle } from "@/components/ui/view-toggle"
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { WishlistItem } from "@/lib/types"
+import { ShoppingCart, Trash2 } from "lucide-react"
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
@@ -35,6 +36,8 @@ export default function MarketplacePage() {
   const [wishlistFilter, setWishlistFilter] = useState<'all' | 'wishlist' | 'priority'>('all')
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
+  const [removingFromCart, setRemovingFromCart] = useState<string | null>(null);
+  const [cartStatus, setCartStatus] = useState<Record<string, boolean>>({});
 
 
   const handleViewChange = (newMode: ViewMode) => {
@@ -43,6 +46,20 @@ export default function MarketplacePage() {
       localStorage.setItem('marketplaceViewMode', newMode)
     }
   }
+
+  const loadCartStatus = useCallback(async (listingIds: string[]) => {
+    if (listingIds.length === 0) return
+    
+    try {
+      const response = await fetch(`/api/cart/status?user_card_ids=${listingIds.join(',')}`)
+      if (response.ok) {
+        const status = await response.json()
+        setCartStatus(status)
+      }
+    } catch (error) {
+      console.error('Error loading cart status:', error)
+    }
+  }, [])
 
   const handleAddToCart = async (user_card_id: string) => {
     setIsAddingToCart(user_card_id);
@@ -61,14 +78,46 @@ export default function MarketplacePage() {
         throw new Error(result.error || 'Failed to add card to cart.');
       }
 
-      // Here you might want to show a success toast/notification
+      // Update cart status
+      setCartStatus(prev => ({ ...prev, [user_card_id]: true }))
       console.log('Card added to cart:', result);
 
     } catch (error) {
-      // Here you might want to show an error toast/notification
       console.error('Error adding to cart:', error);
     } finally {
       setIsAddingToCart(null);
+    }
+  };
+
+  const handleRemoveFromCart = async (user_card_id: string) => {
+    try {
+      setRemovingFromCart(user_card_id)
+
+      const response = await fetch('/api/cart/remove', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_card_id
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to remove item from cart (${response.status})`)
+      }
+
+      // Update cart status
+      setCartStatus(prev => ({ ...prev, [user_card_id]: false }))
+      console.log('Item removed from cart successfully')
+
+    } catch (error) {
+      console.error('Error removing from cart:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove item from cart'
+      alert(`Error: ${errorMessage}`)
+    } finally {
+      setRemovingFromCart(null)
     }
   };
 
@@ -189,6 +238,14 @@ export default function MarketplacePage() {
 
     return () => clearTimeout(timer)
   }, [filters, searchQuery, loadListings])
+
+  // Load cart status when listings change
+  useEffect(() => {
+    if (listings.length > 0) {
+      const listingIds = listings.map(listing => listing.id)
+      loadCartStatus(listingIds)
+    }
+  }, [listings, loadCartStatus])
 
   // Load wishlist items on component mount
   useEffect(() => {
@@ -428,13 +485,44 @@ export default function MarketplacePage() {
                       {listing.seller}
                     </Link>
                   </p>
-                  <Button 
-                    className="w-full mt-4" 
-                    onClick={() => handleAddToCart(listing.id)}
-                    disabled={isAddingToCart === listing.id}
-                  >
-                    {isAddingToCart === listing.id ? 'Adding...' : 'Add to Cart'}
-                  </Button>
+                  {cartStatus[listing.id] ? (
+                    <Button 
+                      onClick={() => handleRemoveFromCart(listing.id)}
+                      disabled={removingFromCart === listing.id}
+                      className="w-full mt-4"
+                      variant="destructive"
+                    >
+                      {removingFromCart === listing.id ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          Removing...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Remove from Cart
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full mt-4" 
+                      onClick={() => handleAddToCart(listing.id)}
+                      disabled={isAddingToCart === listing.id}
+                    >
+                      {isAddingToCart === listing.id ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4 mr-2" />
+                          Add to Cart
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))
@@ -573,13 +661,44 @@ export default function MarketplacePage() {
                       </Link>
                     </td>
                     <td className="py-3 px-3">
-                      <Button 
-                        size="sm"
-                        onClick={() => handleAddToCart(listing.id)}
-                        disabled={isAddingToCart === listing.id}
-                      >
-                        {isAddingToCart === listing.id ? 'Adding...' : 'Add'}
-                      </Button>
+                      {cartStatus[listing.id] ? (
+                        <Button 
+                          onClick={() => handleRemoveFromCart(listing.id)}
+                          disabled={removingFromCart === listing.id}
+                          size="sm"
+                          variant="destructive"
+                        >
+                          {removingFromCart === listing.id ? (
+                            <>
+                              <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                              Removing
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="w-3 h-3 mr-1" />
+                              Remove
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button 
+                          size="sm"
+                          onClick={() => handleAddToCart(listing.id)}
+                          disabled={isAddingToCart === listing.id}
+                        >
+                          {isAddingToCart === listing.id ? (
+                            <>
+                              <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                              Adding
+                            </>
+                          ) : (
+                            <>
+                              <ShoppingCart className="w-3 h-3 mr-1" />
+                              Add
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))

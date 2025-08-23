@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState, FormEvent, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Send, Check, CheckCheck, Clock } from "lucide-react"
@@ -43,9 +44,13 @@ type TransactionItem = {
     user_cards: {
         default_cards: {
             name: string;
-            image_uris: any;
-        }
-    }
+            image_uris: string | {
+                art_crop?: string;
+                normal?: string;
+                large?: string;
+            };
+        };
+    };
 }
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
@@ -174,6 +179,7 @@ export default function MessagesPage() {
             if(itemsError) {
                 console.error("Error fetching transaction items:", itemsError);
             } else {
+                console.log("Transaction items data:", itemsData);
                 setTransactionItems(itemsData);
             }
         } else {
@@ -485,19 +491,36 @@ export default function MessagesPage() {
                                 <AccordionTrigger>{transactionItems.length} items</AccordionTrigger>
                                 <AccordionContent>
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-4">
-                                        {transactionItems.map(item => (
-                                            <div key={item.id}>
-                                                <Image 
-                                                    src={item.user_cards.default_cards.image_uris?.art_crop || FALLBACK_CARD_IMAGE} 
-                                                    alt={item.user_cards.default_cards.name}
-                                                    width={100}
-                                                    height={140}
-                                                    className="rounded-lg"
-                                                />
-                                                <p className="text-sm font-medium mt-1">{item.user_cards.default_cards.name}</p>
-                                                <p className="text-xs text-muted-foreground">${item.agreed_price.toFixed(2)}</p>
-                                            </div>
-                                        ))}
+                                                                                 {transactionItems.map(item => {
+                                            const defaultCard = item.user_cards.default_cards;
+                                            
+                                            // Parse image_uris if it's a string
+                                            let imageUris;
+                                            try {
+                                                imageUris = typeof defaultCard.image_uris === 'string'
+                                                    ? JSON.parse(defaultCard.image_uris)
+                                                    : defaultCard.image_uris;
+                                            } catch (e) {
+                                                console.error('Error parsing image_uris:', e);
+                                                imageUris = null;
+                                            }
+
+                                            const imageUrl = imageUris?.normal || imageUris?.large || FALLBACK_CARD_IMAGE;
+
+                                            return (
+                                                <div key={item.id}>
+                                                    <Image
+                                                        src={imageUrl}
+                                                        alt={defaultCard.name}
+                                                        width={100}
+                                                        height={140}
+                                                        className="rounded-lg"
+                                                    />
+                                                    <p className="text-sm font-medium mt-1">{defaultCard.name}</p>
+                                                    <p className="text-xs text-muted-foreground">${item.agreed_price.toFixed(2)}</p>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>

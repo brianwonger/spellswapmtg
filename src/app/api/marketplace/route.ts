@@ -140,7 +140,10 @@ export async function GET(request: Request) {
     // Filter by search term in card name or set name
     if (filters.search) {
       const searchTerm = `%${filters.search}%`
-      query = query.or(`default_cards.name.ilike.${searchTerm},default_cards.set_name.ilike.${searchTerm}`)
+      query = query.or(
+        `name.ilike.${searchTerm},set_name.ilike.${searchTerm}`,
+        { foreignTable: 'default_cards' }
+      )
     }
 
     const { data, error } = await query
