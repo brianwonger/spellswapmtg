@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Mail, ShoppingCart } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { toast } from "sonner"
 
 // Debug utility to test avatar URL
@@ -90,26 +90,52 @@ type Profile = {
 export function Header() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [cartCount, setCartCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
 
-  // Fetch cart count
+
+  // Refresh cart count function
+  const refreshCartCount = useCallback(async () => {
+    try {
+      const response = await fetch('/api/cart/count')
+      if (!response.ok) throw new Error('Failed to fetch cart count')
+      const data = await response.json()
+      setCartCount(data.count)
+    } catch (error) {
+      console.error('Error fetching cart count:', error)
+    }
+  }, [])
+
+  // Refresh unread message count function
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const response = await fetch('/api/messages/unread-count')
+      if (!response.ok) throw new Error('Failed to fetch unread count')
+      const data = await response.json()
+      setUnreadCount(data.count)
+    } catch (error) {
+      console.error('Error fetching unread count:', error)
+    }
+  }, [])
+
+  // Initial fetch on mount
   useEffect(() => {
-    async function fetchCartCount() {
-      try {
-        const response = await fetch('/api/cart/count')
-        if (!response.ok) throw new Error('Failed to fetch cart count')
-        const data = await response.json()
-        setCartCount(data.count)
-      } catch (error) {
-        console.error('Error fetching cart count:', error)
+    refreshCartCount()
+    refreshUnreadCount()
+  }, [refreshCartCount, refreshUnreadCount])
+
+  // Refresh counts when page becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshCartCount()
+        refreshUnreadCount()
       }
     }
 
-    fetchCartCount()
-    // Refresh cart count every 30 seconds
-    const interval = setInterval(fetchCartCount, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [refreshCartCount, refreshUnreadCount])
 
   useEffect(() => {
     async function getProfile() {
@@ -165,7 +191,11 @@ export function Header() {
         </Link>
         <MainNav />
         <div className="flex items-center ml-auto space-x-4">
-          <Link href="/cart" className="text-muted-foreground hover:text-foreground transition-colors relative">
+          <Link
+            href="/cart"
+            className="text-muted-foreground hover:text-foreground transition-colors relative"
+            onClick={refreshCartCount}
+          >
             <ShoppingCart className="h-5 w-5" />
             {cartCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
@@ -173,10 +203,19 @@ export function Header() {
               </span>
             )}
           </Link>
-          <Link href="/messages" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            href="/messages"
+            className="text-muted-foreground hover:text-foreground transition-colors relative"
+            onClick={refreshUnreadCount}
+          >
             <Mail className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
           </Link>
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => open && (refreshCartCount(), refreshUnreadCount())}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">

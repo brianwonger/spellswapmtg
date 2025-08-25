@@ -350,7 +350,11 @@ CREATE POLICY "Users can manage their own wishlist" ON wishlist_items FOR ALL US
 CREATE POLICY "Users can view transactions they're involved in" ON transactions 
   FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
 
-CREATE POLICY "Users can view their own messages" ON messages
+-- Messages RLS Policies
+-- Updated to support marking messages as read functionality
+
+-- SELECT: Users can view messages in conversations they're involved in
+CREATE POLICY "Users can view messages in their conversations" ON messages
   FOR SELECT USING (
     auth.uid() IN (
       SELECT participant1_id FROM conversations WHERE id = conversation_id
@@ -359,15 +363,19 @@ CREATE POLICY "Users can view their own messages" ON messages
     )
   );
 
-CREATE POLICY "Users can insert messages in their conversations" ON messages
+-- INSERT: Users can send messages in conversations they're involved in
+CREATE POLICY "Users can send messages in their conversations" ON messages
   FOR INSERT WITH CHECK (
     auth.uid() IN (
       SELECT participant1_id FROM conversations WHERE id = conversation_id
       UNION
       SELECT participant2_id FROM conversations WHERE id = conversation_id
-    )
+    ) AND
+    auth.uid() = sender_id
   );
 
+-- UPDATE: Users can update messages in conversations they're involved in
+-- This is crucial for marking messages as read - users need to update messages from other participants
 CREATE POLICY "Users can update messages in their conversations" ON messages
   FOR UPDATE USING (
     auth.uid() IN (
@@ -376,6 +384,10 @@ CREATE POLICY "Users can update messages in their conversations" ON messages
       SELECT participant2_id FROM conversations WHERE id = conversation_id
     )
   );
+
+-- DELETE: Users can delete their own messages
+CREATE POLICY "Users can delete their own messages" ON messages
+  FOR DELETE USING (auth.uid() = sender_id);
 
 -- Functions for common operations
 CREATE OR REPLACE FUNCTION update_user_rating(user_uuid UUID)

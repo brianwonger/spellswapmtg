@@ -140,6 +140,49 @@ export default function MessagesPage() {
     fetchConversations();
   }, [router]);
 
+  // Function to mark messages as read
+  const markMessagesAsRead = async (conversationId: string, markAll: boolean = true, messageIds?: string[]) => {
+    try {
+      const response = await fetch('/api/messages/mark-read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId,
+          messageIds,
+          markAll,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark messages as read');
+      }
+
+      const result = await response.json();
+      console.log('Messages marked as read:', result);
+
+      // Update local message state to reflect read status
+      if (markAll) {
+        setMessages(prev => prev.map(msg =>
+          msg.sender_id !== userId ? { ...msg, is_read: true } : msg
+        ));
+      } else if (messageIds) {
+        setMessages(prev => prev.map(msg =>
+          messageIds.includes(msg.id) ? { ...msg, is_read: true } : msg
+        ));
+      }
+
+      // Update conversation unread count
+      setConversations(prev => prev.map(conv =>
+        conv.id === conversationId ? { ...conv, unread_count: 0 } : conv
+      ));
+
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchMessagesAndItems = async () => {
         if (!selectedConversation) return;
@@ -157,6 +200,20 @@ export default function MessagesPage() {
             console.error("Error fetching messages:", messagesError);
         } else {
             setMessages(messagesData);
+
+            // Mark messages as read when conversation is opened
+            if (userId && messagesData.length > 0) {
+              // Find unread messages from other users
+              const unreadMessageIds = messagesData
+                .filter(msg => msg.sender_id !== userId && !msg.is_read)
+                .map(msg => msg.id);
+
+              if (unreadMessageIds.length > 0) {
+                setTimeout(() => {
+                  markMessagesAsRead(selectedConversation.id, false, unreadMessageIds);
+                }, 1000); // Small delay to ensure UI is rendered
+              }
+            }
         }
 
         // Fetch transaction items
@@ -189,7 +246,7 @@ export default function MessagesPage() {
 
     fetchMessagesAndItems();
 
-  }, [selectedConversation]);
+  }, [selectedConversation, userId]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -242,6 +299,13 @@ export default function MessagesPage() {
 
             // Mark message as delivered for the sender
             setMessageStatuses(prev => ({ ...prev, [newMessage.id]: 'delivered' }));
+
+            // Mark the new message as read since user is actively viewing the conversation
+            if (selectedConversation && newMessage.conversation_id === selectedConversation.id) {
+              setTimeout(() => {
+                markMessagesAsRead(selectedConversation.id, false, [newMessage.id]);
+              }, 500); // Small delay to ensure message is in the UI
+            }
           }
 
           // Update conversation's last_message_at
