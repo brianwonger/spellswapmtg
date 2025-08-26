@@ -60,6 +60,7 @@ type Transaction = {
     buyer_id: string;
     seller_id: string;
     status: string;
+    cancelled_by?: string;
 }
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
@@ -75,6 +76,7 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showSellerCancelDialog, setShowSellerCancelDialog] = useState(false);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -102,8 +104,8 @@ export default function MessagesPage() {
   const getDisabledMessage = (): string => {
     if (!transaction) return '';
     if (transaction.status === 'cancelled') {
-      const userRole = getUserRole();
-      return `This conversation is disabled because the transaction was cancelled by the ${userRole === 'buyer' ? 'buyer' : 'buyer'}.`;
+      const cancelledByRole = transaction.cancelled_by === transaction.buyer_id ? 'buyer' : 'seller';
+      return `This conversation is disabled because the transaction was cancelled by the ${cancelledByRole}.`;
     }
     if (transaction.status === 'completed') {
       return 'This conversation is disabled because the transaction was completed.';
@@ -249,7 +251,9 @@ export default function MessagesPage() {
         )
       );
 
-      alert('Transaction cancelled successfully. The seller has been notified.');
+      const userRole = getUserRole();
+      const notificationTarget = userRole === 'buyer' ? 'seller' : 'buyer';
+      alert(`Transaction cancelled successfully. The ${notificationTarget} has been notified.`);
 
     } catch (error) {
       console.error('Error in cancelTransaction:', error);
@@ -413,7 +417,7 @@ export default function MessagesPage() {
             // Fetch transaction data
             const { data: transactionData, error: transactionError } = await supabase
                 .from('transactions')
-                .select('id, buyer_id, seller_id, status')
+                .select('id, buyer_id, seller_id, status, cancelled_by')
                 .eq('id', selectedConversation.transaction_id)
                 .single();
 
@@ -878,14 +882,24 @@ export default function MessagesPage() {
                                 </div>
                             )}
                             {getUserRole() === 'seller' && transaction?.status === 'pending' && (
-                                <Button
-                                    onClick={acceptTransaction}
-                                    size="sm"
-                                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                    <Handshake className="h-4 w-4 mr-1" />
-                                    Accept Transaction
-                                </Button>
+                                <div className="flex flex-col gap-2">
+                                    <Button
+                                        onClick={acceptTransaction}
+                                        size="sm"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    >
+                                        <Handshake className="h-4 w-4 mr-1" />
+                                        Accept Transaction
+                                    </Button>
+                                    <Button
+                                        onClick={() => setShowSellerCancelDialog(true)}
+                                        size="sm"
+                                        variant="destructive"
+                                    >
+                                        <X className="h-4 w-4 mr-1" />
+                                        Cancel Transaction
+                                    </Button>
+                                </div>
                             )}
                             {isTransactionAccepted() && getUserRole() === 'buyer' && (
                                 <div className="flex gap-2">
@@ -955,12 +969,22 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* Cancel Transaction Dialog */}
+      {/* Cancel Transaction Dialog for Buyers */}
       <CancelTransactionDialog
         open={showCancelDialog}
         onOpenChange={setShowCancelDialog}
         onConfirm={cancelTransaction}
         transactionId={transaction?.id || ''}
+        description="Are you sure you want to cancel this transaction? The seller will be notified."
+      />
+
+      {/* Cancel Transaction Dialog for Sellers */}
+      <CancelTransactionDialog
+        open={showSellerCancelDialog}
+        onOpenChange={setShowSellerCancelDialog}
+        onConfirm={cancelTransaction}
+        transactionId={transaction?.id || ''}
+        description="Are you sure you want to cancel this transaction? The buyer will be notified."
       />
     </div>
   )

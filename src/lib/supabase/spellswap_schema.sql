@@ -208,12 +208,15 @@ CREATE TABLE wishlist_items (
   UNIQUE(user_id, card_id)
 );
 
+-- First, create the transaction_status ENUM type
+CREATE TYPE transaction_status AS ENUM ('open', 'pending', 'accepted', 'completed', 'cancelled');
+
 -- Transactions/trades
 CREATE TABLE transactions (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   buyer_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   seller_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'accepted', 'completed', 'cancelled'
+  status transaction_status DEFAULT 'open', -- 'open', 'pending', 'accepted', 'completed', 'cancelled'
   total_amount DECIMAL(10,2),
   meeting_location VARCHAR(255),
   meeting_time TIMESTAMP WITH TIME ZONE,

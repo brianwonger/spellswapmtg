@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You cannot add your own card to the cart." }, { status: 400 });
     }
 
-    // 2. Find an existing 'pending' transaction or create a new one
+    // 2. Find an existing 'open' transaction or create a new one
     let transaction_id: string
 
     const { data: existingTransaction, error: transactionError } = await supabase
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       .select('id, status')
       .eq('buyer_id', user.id)
       .eq('seller_id', seller_id)
-      .in('status', ['pending', 'accepted'])
+      .in('status', ['open', 'pending', 'accepted'])
       .single()
 
     if (transactionError && transactionError.code !== 'PGRST116') { // PGRST116 = no rows found
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
     }
 
     if (existingTransaction) {
-      // Check if transaction is accepted - don't allow adding items if it is
-      if (existingTransaction.status === 'accepted') {
+      // Prevent adding items if transaction is pending or accepted
+      if (['pending', 'accepted'].includes(existingTransaction.status)) {
         return NextResponse.json({
-          error: "Cannot add items to cart. Transaction has already been accepted by the seller. Please coordinate with the seller to complete the transaction."
+          error: "Cannot add items to cart. A transaction with this seller is already pending or has been accepted."
         }, { status: 400 });
       }
       transaction_id = existingTransaction.id
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
         .insert({
           buyer_id: user.id,
           seller_id: seller_id,
-          status: 'pending',
+          status: 'open',
         })
         .select('id')
         .single()

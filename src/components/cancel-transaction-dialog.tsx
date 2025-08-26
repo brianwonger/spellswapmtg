@@ -19,13 +19,15 @@ interface CancelTransactionDialogProps {
   onOpenChange: (open: boolean) => void
   onConfirm: (reason: string) => Promise<void>
   transactionId: string
+  description?: string
 }
 
 export function CancelTransactionDialog({
   open,
   onOpenChange,
   onConfirm,
-  transactionId
+  transactionId,
+  description = "Are you sure you want to cancel this transaction? The other party will be notified."
 }: CancelTransactionDialogProps) {
   const [reason, setReason] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -82,7 +84,7 @@ export function CancelTransactionDialog({
             <div>
               <DialogTitle className="text-red-600">Cancel Transaction</DialogTitle>
               <DialogDescription>
-                Are you sure you want to cancel this transaction? The seller will be notified.
+                {description}
               </DialogDescription>
             </div>
           </div>

@@ -27,26 +27,52 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Verify the transaction exists and user is the buyer
+    // Verify the transaction exists and user is either buyer or seller
     const { data: transaction, error: findTransactionError } = await supabase
       .from('transactions')
       .select('id, buyer_id, seller_id, status, notes')
       .eq('id', transaction_id)
-      .eq('buyer_id', user.id)
+      .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
       .single()
 
     if (findTransactionError || !transaction) {
       console.error('Error finding transaction:', findTransactionError)
+      console.error('Transaction ID:', transaction_id)
+      console.error('User ID:', user.id)
       return NextResponse.json({
         error: 'Transaction not found or you do not have permission to cancel this transaction.'
       }, { status: 404 })
     }
 
-    // Check if transaction is in 'accepted' status (only accepted transactions can be cancelled by buyer)
-    if (transaction.status !== 'accepted') {
+    // Determine user role
+    const isBuyer = transaction.buyer_id === user.id
+    const isSeller = transaction.seller_id === user.id
+
+    console.log('Transaction found:', {
+      id: transaction.id,
+      status: transaction.status,
+      buyer_id: transaction.buyer_id,
+      seller_id: transaction.seller_id,
+      user_id: user.id,
+      isBuyer,
+      isSeller
+    })
+
+    // Check cancellation permissions based on user role and transaction status
+    if (isBuyer && transaction.status !== 'accepted') {
       return NextResponse.json({
         error: transaction.status === 'pending'
           ? 'Transaction must be accepted before it can be cancelled. Remove items from cart instead.'
+          : transaction.status === 'completed'
+          ? 'Transaction has already been completed and cannot be cancelled.'
+          : 'Transaction cannot be cancelled in its current status.'
+      }, { status: 400 })
+    }
+
+    if (isSeller && !['pending', 'open'].includes(transaction.status)) {
+      return NextResponse.json({
+        error: transaction.status === 'accepted'
+          ? 'Cannot cancel an accepted transaction. Please coordinate with the buyer.'
           : transaction.status === 'completed'
           ? 'Transaction has already been completed and cannot be cancelled.'
           : 'Transaction cannot be cancelled in its current status.'
@@ -82,13 +108,16 @@ export async function POST(request: Request) {
       .single()
 
     if (conversation && !conversationError) {
-      // Send notification message to seller
+      // Send notification message to the other party
+      const recipientRole = isBuyer ? 'seller' : 'buyer'
+      const notificationMessage = `❌ Transaction Cancelled\n\nReason: ${cancellationReason}\n\nThe transaction has been cancelled by the ${isBuyer ? 'buyer' : 'seller'}. If you believe this was done in error, please contact the ${recipientRole} directly.`
+
       const { error: messageError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversation.id,
           sender_id: user.id,
-          content: `❌ Transaction Cancelled\n\nReason: ${cancellationReason}\n\nThe transaction has been cancelled. If you believe this was done in error, please contact the buyer directly.`,
+          content: notificationMessage,
         })
 
       if (messageError) {
@@ -103,8 +132,10 @@ export async function POST(request: Request) {
         .eq('id', conversation.id)
     }
 
+    const successMessage = `Transaction cancelled successfully. The ${isBuyer ? 'seller' : 'buyer'} has been notified.`
+
     return NextResponse.json({
-      message: 'Transaction cancelled successfully. The seller has been notified.',
+      message: successMessage,
       transaction_id: transaction_id
     }, { status: 200 })
 

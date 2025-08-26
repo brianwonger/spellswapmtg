@@ -33,6 +33,7 @@ type CartItem = {
 
 type TransactionWithItems = {
   id: string;
+  status: string;
   seller_id: string;
   seller_name: string | null;
   transaction_items: CartItem[];
@@ -48,6 +49,7 @@ export default function CartPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [removingItems, setRemovingItems] = useState<Set<string>>(new Set())
   const [clearingCarts, setClearingCarts] = useState<Set<string>>(new Set())
+  const [submittingCarts, setSubmittingCarts] = useState<Set<string>>(new Set())
   const router = useRouter()
 
   const clearMessages = () => {
@@ -69,6 +71,7 @@ export default function CartPage() {
         .from('transactions')
         .select(`
           id,
+          status,
           seller:profiles!transactions_seller_id_fkey(
             id,
             display_name
@@ -89,7 +92,7 @@ export default function CartPage() {
           )
         `)
         .eq('buyer_id', user.id)
-        .eq('status', 'pending')
+        .in('status', ['open', 'pending'])
 
       if (error) {
         console.error('Error fetching transactions:', error)
@@ -99,7 +102,7 @@ export default function CartPage() {
           const sellerId = tx.seller.id;
           const sellerName = tx.seller.display_name;
           if (!acc[sellerId]) {
-            acc[sellerId] = { id: tx.id, seller_id: sellerId, seller_name: sellerName, transaction_items: [] };
+            acc[sellerId] = { id: tx.id, status: tx.status, seller_id: sellerId, seller_name: sellerName, transaction_items: [] };
           }
 
           // Parse image_uris for each transaction item
@@ -137,6 +140,51 @@ export default function CartPage() {
     fetchCart()
   }, [router])
   
+  const handleSubmitCart = async (transactionId: string) => {
+    clearMessages()
+    setSubmittingCarts(prev => new Set(prev).add(transactionId))
+
+    try {
+      const response = await fetch('/api/transactions/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ transaction_id: transactionId }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit cart.')
+      }
+
+      // Remove the submitted cart from the local state
+      setGroupedBySeller(prev => {
+        const newState = { ...prev }
+        const sellerKey = Object.keys(newState).find(key =>
+          newState[key].id === transactionId
+        )
+        if (sellerKey) {
+          delete newState[sellerKey]
+        }
+        return newState
+      })
+
+      setSuccessMessage('Cart submitted to seller successfully! You will be notified when they respond.')
+
+    } catch (error) {
+      console.error('Error submitting cart:', error)
+      setError(error instanceof Error ? error.message : 'Failed to submit cart. Please try again.')
+    } finally {
+      setSubmittingCarts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(transactionId)
+        return newSet
+      })
+    }
+  };
+
   const handleContactSeller = async (transaction_id: string) => {
     try {
         const response = await fetch('/api/conversations/create', {
@@ -374,8 +422,19 @@ export default function CartPage() {
                   ))}
                 </ul>
                 <Separator className="my-4" />
-                <div className="flex justify-end items-center">
-                   <Button onClick={() => handleContactSeller(transaction.id)}>Contact Seller to Purchase</Button>
+                <div className="flex justify-end items-center space-x-2">
+                  {transaction.status === 'open' && (
+                    <Button 
+                      onClick={() => handleSubmitCart(transaction.id)}
+                      disabled={submittingCarts.has(transaction.id)}
+                    >
+                      {submittingCarts.has(transaction.id) ? 'Submitting...' : 'Submit to Seller'}
+                    </Button>
+                  )}
+                  {transaction.status === 'pending' && (
+                    <p className="text-sm text-gray-500 italic">Waiting for seller to respond.</p>
+                  )}
+                   <Button variant="secondary" onClick={() => handleContactSeller(transaction.id)}>Contact Seller</Button>
                 </div>
               </CardContent>
             </Card>

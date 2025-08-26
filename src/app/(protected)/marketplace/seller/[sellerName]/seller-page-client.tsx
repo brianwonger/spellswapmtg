@@ -8,6 +8,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
@@ -65,7 +66,7 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
   const handleAddToCart = async (listing: MarketplaceListing) => {
     try {
       setAddingToCart(listing.id)
-      
+
       const response = await fetch('/api/cart/add', {
         method: 'POST',
         headers: {
@@ -77,16 +78,18 @@ export default function SellerPageClient({ sellerName }: SellerPageClientProps) 
         }),
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        throw new Error('Failed to add item to cart')
+        throw new Error(result.error || 'Failed to add item to cart')
       }
 
       // Update cart status
       setCartStatus(prev => ({ ...prev, [listing.id]: true }))
-      console.log('Item added to cart successfully')
-      
+
     } catch (error) {
-      console.error('Error adding to cart:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add item to cart.'
+      toast.error(errorMessage)
     } finally {
       setAddingToCart(null)
     }

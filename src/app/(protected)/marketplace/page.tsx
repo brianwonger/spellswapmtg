@@ -20,6 +20,7 @@ import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { WishlistItem } from "@/lib/types"
 import { ShoppingCart, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
@@ -83,7 +84,8 @@ export default function MarketplacePage() {
       console.log('Card added to cart:', result);
 
     } catch (error) {
-      console.error('Error adding to cart:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add card to cart.';
+      toast.error(errorMessage);
     } finally {
       setIsAddingToCart(null);
     }
