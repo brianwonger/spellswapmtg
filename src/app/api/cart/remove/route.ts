@@ -19,22 +19,29 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    // Find the specific transaction item to delete that belongs to the user in a pending transaction
+    // Find the specific transaction item to delete that belongs to the user
     const { data: transactionItem, error: findError } = await supabase
       .from('transaction_items')
       .select(`
         id,
         transaction_id,
-        transactions!inner(id)
+        transactions!inner(id, status, buyer_id)
       `)
       .eq('user_card_id', user_card_id)
       .eq('transactions.buyer_id', user.id)
-      .eq('transactions.status', 'pending')
+      .in('transactions.status', ['pending', 'accepted'])
       .single()
 
     if (findError || !transactionItem) {
       console.error('Error finding item in cart, or item does not exist:', findError)
-      return NextResponse.json({ error: 'Item not found in a pending transaction for this user.' }, { status: 404 })
+      return NextResponse.json({ error: 'Item not found in a transaction for this user.' }, { status: 404 })
+    }
+
+    // Check if transaction is accepted - don't allow removing items if it is
+    if (transactionItem.transactions.status === 'accepted') {
+      return NextResponse.json({
+        error: "Cannot remove items from cart. Transaction has already been accepted by the seller. Please coordinate with the seller to complete the transaction."
+      }, { status: 400 });
     }
 
     const transactionId = transactionItem.transaction_id;
@@ -66,16 +73,21 @@ export async function DELETE(request: Request) {
       console.error('Error checking for remaining items:', countError)
     }
 
-    // If no items remain, delete the parent transaction
+    // If no items remain, mark the transaction as cancelled
     if (remainingItems && remainingItems.length === 0) {
-      const { error: deleteTransactionError } = await supabase
+      const { error: cancelTransactionError } = await supabase
         .from('transactions')
-        .delete()
+        .update({
+          status: 'cancelled',
+          cancelled_by: user.id,
+          cancellation_reason: 'Cart emptied by buyer',
+          updated_at: new Date().toISOString()
+        })
         .eq('id', transactionId)
 
-      if (deleteTransactionError) {
+      if (cancelTransactionError) {
         // Log the error but don't block the response
-        console.error('Error deleting empty transaction:', deleteTransactionError)
+        console.error('Error cancelling empty transaction:', cancelTransactionError)
       }
     }
 

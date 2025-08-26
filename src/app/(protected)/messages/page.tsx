@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Send, Check, CheckCheck, Clock } from "lucide-react"
+import { Search, Send, Check, CheckCheck, Clock, CheckCircle, Handshake, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { CancelTransactionDialog } from '@/components/cancel-transaction-dialog'
 
 // Define types for our data
 type Profile = {
@@ -25,6 +26,7 @@ type Conversation = {
   last_message_at: string;
   unread_count: number;
   transaction_id: string | null;
+  transaction_status?: string | null;
 }
 
 type Message = {
@@ -53,6 +55,13 @@ type TransactionItem = {
     };
 }
 
+type Transaction = {
+    id: string;
+    buyer_id: string;
+    seller_id: string;
+    status: string;
+}
+
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
 export default function MessagesPage() {
@@ -60,12 +69,193 @@ export default function MessagesPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [transactionItems, setTransactionItems] = useState<TransactionItem[]>([]);
+  const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Helper function to determine user's role in transaction
+  const getUserRole = (): string | null => {
+    if (!transaction || !userId) return null;
+    if (transaction.buyer_id === userId) return 'buyer';
+    if (transaction.seller_id === userId) return 'seller';
+    return null;
+  };
+
+  // Helper function to check if conversation is disabled
+  const isConversationDisabled = (): boolean => {
+    if (!transaction) return false;
+    return transaction.status === 'cancelled' || transaction.status === 'completed';
+  };
+
+  // Helper function to check if transaction is accepted
+  const isTransactionAccepted = (): boolean => {
+    if (!transaction) return false;
+    return transaction.status === 'accepted';
+  };
+
+  // Helper function to get disabled conversation message
+  const getDisabledMessage = (): string => {
+    if (!transaction) return '';
+    if (transaction.status === 'cancelled') {
+      const userRole = getUserRole();
+      return `This conversation is disabled because the transaction was cancelled by the ${userRole === 'buyer' ? 'buyer' : 'buyer'}.`;
+    }
+    if (transaction.status === 'completed') {
+      return 'This conversation is disabled because the transaction was completed.';
+    }
+    if (transaction.status === 'accepted') {
+      return 'Messaging is still enabled. Please coordinate with the other party to complete the transaction.';
+    }
+    if (transaction.status === 'pending') {
+      const userRole = getUserRole();
+      if (userRole === 'seller') {
+        return 'Review the transaction details above and click "Accept Transaction" when ready.';
+      }
+      if (userRole === 'buyer') {
+        return 'Waiting for the seller to accept the transaction. You can continue messaging.';
+      }
+    }
+    return '';
+  };
+
+  // Function to mark transaction as complete
+  const markTransactionComplete = async () => {
+    if (!transaction || !selectedConversation) return;
+
+    try {
+      const response = await fetch('/api/transactions/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transaction_id: transaction.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error marking transaction as complete:', errorData.error);
+        alert(`Error: ${errorData.error}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('Transaction marked as complete:', result);
+
+      // Update local transaction state
+      setTransaction(prev => prev ? { ...prev, status: 'completed' } : null);
+
+      // Update conversation status
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, transaction_status: 'completed' }
+            : conv
+        )
+      );
+
+      alert('Transaction marked as complete! Payment will be transferred once the payment feature is implemented.');
+
+    } catch (error) {
+      console.error('Error in markTransactionComplete:', error);
+      alert('An error occurred while marking the transaction as complete.');
+    }
+  };
+
+  // Function to accept transaction (for sellers)
+  const acceptTransaction = async () => {
+    if (!transaction || !selectedConversation) return;
+
+    try {
+      const response = await fetch('/api/transactions/accept', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transaction_id: transaction.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error accepting transaction:', errorData.error);
+        alert(`Error: ${errorData.error}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('Transaction accepted:', result);
+
+      // Update local transaction state
+      setTransaction(prev => prev ? { ...prev, status: 'accepted' } : null);
+
+      // Update conversation status
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, transaction_status: 'accepted' }
+            : conv
+        )
+      );
+
+      alert('Transaction accepted! You can now coordinate with the buyer to complete the exchange.');
+
+    } catch (error) {
+      console.error('Error in acceptTransaction:', error);
+      alert('An error occurred while accepting the transaction.');
+    }
+  };
+
+  // Function to cancel transaction (for buyers)
+  const cancelTransaction = async (reason: string) => {
+    if (!transaction || !selectedConversation) return;
+
+    try {
+      const response = await fetch('/api/transactions/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transaction_id: transaction.id,
+          reason: reason,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to cancel transaction');
+      }
+
+      const result = await response.json();
+      console.log('Transaction cancelled:', result);
+
+      // Update local transaction state
+      setTransaction(prev => prev ? { ...prev, status: 'cancelled' } : null);
+
+      // Update conversation status
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, transaction_status: 'cancelled' }
+            : conv
+        )
+      );
+
+      alert('Transaction cancelled successfully. The seller has been notified.');
+
+    } catch (error) {
+      console.error('Error in cancelTransaction:', error);
+      throw error;
+    }
+  };
 
   // Helper function to render message status icon
   const renderMessageStatus = (messageId: string) => {
@@ -107,7 +297,8 @@ export default function MessagesPage() {
           last_message_at,
           transaction_id,
           participant1:profiles!conversations_participant1_id_fkey(id, display_name, avatar_url),
-          participant2:profiles!conversations_participant2_id_fkey(id, display_name, avatar_url)
+          participant2:profiles!conversations_participant2_id_fkey(id, display_name, avatar_url),
+          transaction:transactions!conversations_transaction_id_fkey(status)
         `)
         .or(`participant1_id.eq.${user.id},participant2_id.eq.${user.id}`);
 
@@ -126,6 +317,7 @@ export default function MessagesPage() {
               last_message_at: conv.last_message_at,
               unread_count: 0, // TODO: Implement unread count
               transaction_id: conv.transaction_id,
+              transaction_status: conv.transaction?.status || null,
           }
       }).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
 
@@ -216,8 +408,23 @@ export default function MessagesPage() {
             }
         }
 
-        // Fetch transaction items
+        // Fetch transaction and transaction items
         if (selectedConversation.transaction_id) {
+            // Fetch transaction data
+            const { data: transactionData, error: transactionError } = await supabase
+                .from('transactions')
+                .select('id, buyer_id, seller_id, status')
+                .eq('id', selectedConversation.transaction_id)
+                .single();
+
+            if (transactionError) {
+                console.error("Error fetching transaction:", transactionError);
+                setTransaction(null);
+            } else {
+                setTransaction(transactionData);
+            }
+
+            // Fetch transaction items
             const { data: itemsData, error: itemsError } = await supabase
                 .from('transaction_items')
                 .select(`
@@ -240,6 +447,7 @@ export default function MessagesPage() {
                 setTransactionItems(itemsData);
             }
         } else {
+            setTransaction(null);
             setTransactionItems([]);
         }
     };
@@ -337,6 +545,9 @@ export default function MessagesPage() {
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation || !userId) return;
+
+    // Prevent sending messages if conversation is disabled
+    if (isConversationDisabled()) return;
 
     const supabase = createClient();
     const messageContent = newMessage.trim();
@@ -437,14 +648,30 @@ export default function MessagesPage() {
             {isLoading ? (
                 <div className="p-4 text-center">Loading conversations...</div>
             ) : (
-              conversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`p-4 border-b hover:bg-accent cursor-pointer ${
-                  selectedConversation?.id === conversation.id ? "bg-accent" : ""
-                }`}
-                onClick={() => setSelectedConversation(conversation)}
-              >
+              conversations.map((conversation) => {
+                // Check if this conversation has a disabled transaction
+                const isDisabled = conversation.transaction_id && conversation.transaction_status &&
+                  (conversation.transaction_status === 'cancelled' || conversation.transaction_status === 'completed');
+
+                // Get display status for transaction
+                const getTransactionDisplayStatus = (status: string | null) => {
+                  switch (status) {
+                    case 'accepted': return 'Accepted - Ready for Pickup';
+                    case 'cancelled': return 'Transaction Cancelled';
+                    case 'completed': return 'Transaction Completed';
+                    case 'pending': return 'Pending';
+                    default: return status?.charAt(0).toUpperCase() + status?.slice(1);
+                  }
+                };
+
+                return (
+                  <div
+                    key={conversation.id}
+                    className={`p-4 border-b hover:bg-accent cursor-pointer ${
+                      selectedConversation?.id === conversation.id ? "bg-accent" : ""
+                    } ${isDisabled ? "opacity-60 bg-gray-50" : ""}`}
+                    onClick={() => setSelectedConversation(conversation)}
+                  >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10">
                     <AvatarImage
@@ -469,9 +696,25 @@ export default function MessagesPage() {
                   {conversation.unread_count > 0 && (
                     <div className="w-2 h-2 bg-blue-500 rounded-full" />
                   )}
+                    {conversation.transaction_status && (
+                      <div className="mt-1">
+                        <span className={`text-xs font-medium ${
+                          conversation.transaction_status === 'cancelled'
+                            ? 'text-red-500'
+                            : conversation.transaction_status === 'completed'
+                            ? 'text-green-500'
+                            : conversation.transaction_status === 'accepted'
+                            ? 'text-orange-500'
+                            : 'text-blue-500'
+                        }`}>
+                          {getTransactionDisplayStatus(conversation.transaction_status)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
             )}
           </div>
         </div>
@@ -499,7 +742,7 @@ export default function MessagesPage() {
                 </div>
                 
                 <div
-                  className="flex-1 overflow-y-auto p-4 space-y-4"
+                  className="flex-1 overflow-y-auto p-4 space-y-4 max-h-96"
                 >
                   {messages.map((message) => (
                     <div
@@ -529,12 +772,70 @@ export default function MessagesPage() {
                 </div>
 
                 <div className="p-4 border-t">
-                  <form className="flex gap-2" onSubmit={handleSendMessage}>
-                    <Input placeholder="Type a message..." className="flex-1" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-                    <Button type="submit" size="icon">
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </form>
+                  {isConversationDisabled() ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-muted-foreground mb-2">{getDisabledMessage()}</p>
+                      <div className="flex gap-2 justify-center">
+                        <Input
+                          placeholder="Messaging is disabled for this conversation..."
+                          className="flex-1 opacity-50 cursor-not-allowed"
+                          disabled
+                        />
+                        <Button type="button" size="icon" disabled>
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {transaction?.status === 'pending' && (
+                        <div className="text-center py-2">
+                          {getUserRole() === 'seller' ? (
+                            <div>
+                              <p className="text-sm text-blue-600 font-medium">
+                                Review the transaction and click "Accept Transaction" when ready.
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Accepting will lock the cart and allow you to coordinate the exchange.
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-sm text-yellow-600 font-medium">
+                                Waiting for seller to accept the transaction.
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                You can continue messaging while waiting.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {isTransactionAccepted() && (
+                        <div className="text-center py-2">
+                          <p className="text-sm text-orange-600 font-medium">
+                            Transaction accepted! Coordinate with the other party to complete the exchange.
+                          </p>
+                          {getUserRole() === 'buyer' && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Once you receive the items, click "Mark as Complete" above to finish the transaction.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <form className="flex gap-2" onSubmit={handleSendMessage}>
+                        <Input
+                          placeholder="Type a message..."
+                          className="flex-1"
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                        />
+                        <Button type="submit" size="icon">
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -545,9 +846,68 @@ export default function MessagesPage() {
             </div>
 
             {transactionItems.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Items in this Conversation</CardTitle>
+                <Card className={isConversationDisabled() ? "opacity-75" : ""}>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <CardTitle>Items in this Conversation</CardTitle>
+                            {transaction && (
+                                <div className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                    transaction.status === 'cancelled'
+                                        ? 'bg-red-100 text-red-800'
+                                        : transaction.status === 'completed'
+                                        ? 'bg-green-100 text-green-800'
+                                        : transaction.status === 'accepted'
+                                        ? 'bg-orange-100 text-orange-800'
+                                        : transaction.status === 'pending'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : 'bg-muted text-muted-foreground'
+                                }`}>
+                                    {transaction.status === 'accepted'
+                                        ? 'Accepted - Ready for Pickup'
+                                        : transaction.status === 'cancelled'
+                                        ? 'Transaction Cancelled'
+                                        : transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)
+                                    }
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {getUserRole() && (
+                                <div className="text-sm font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                                    {getUserRole() === 'buyer' ? 'You are the buyer' : 'You are the seller'}
+                                </div>
+                            )}
+                            {getUserRole() === 'seller' && transaction?.status === 'pending' && (
+                                <Button
+                                    onClick={acceptTransaction}
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                    <Handshake className="h-4 w-4 mr-1" />
+                                    Accept Transaction
+                                </Button>
+                            )}
+                            {isTransactionAccepted() && getUserRole() === 'buyer' && (
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={markTransactionComplete}
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                    >
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                        Mark as Complete
+                                    </Button>
+                                    <Button
+                                        onClick={() => setShowCancelDialog(true)}
+                                        size="sm"
+                                        variant="destructive"
+                                    >
+                                        <X className="h-4 w-4 mr-1" />
+                                        Cancel Transaction
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Accordion type="single" collapsible>
@@ -594,6 +954,14 @@ export default function MessagesPage() {
             )}
         </div>
       </div>
+
+      {/* Cancel Transaction Dialog */}
+      <CancelTransactionDialog
+        open={showCancelDialog}
+        onOpenChange={setShowCancelDialog}
+        onConfirm={cancelTransaction}
+        transactionId={transaction?.id || ''}
+      />
     </div>
   )
 } 

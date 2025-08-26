@@ -44,10 +44,10 @@ export async function POST(request: Request) {
 
     const { data: existingTransaction, error: transactionError } = await supabase
       .from('transactions')
-      .select('id')
+      .select('id, status')
       .eq('buyer_id', user.id)
       .eq('seller_id', seller_id)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'accepted'])
       .single()
 
     if (transactionError && transactionError.code !== 'PGRST116') { // PGRST116 = no rows found
@@ -56,6 +56,12 @@ export async function POST(request: Request) {
     }
 
     if (existingTransaction) {
+      // Check if transaction is accepted - don't allow adding items if it is
+      if (existingTransaction.status === 'accepted') {
+        return NextResponse.json({
+          error: "Cannot add items to cart. Transaction has already been accepted by the seller. Please coordinate with the seller to complete the transaction."
+        }, { status: 400 });
+      }
       transaction_id = existingTransaction.id
     } else {
       const { data: newTransaction, error: newTransactionError } = await supabase
