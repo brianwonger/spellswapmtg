@@ -1,13 +1,13 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState, FormEvent, useRef } from 'react'
+import { useEffect, useState, FormEvent, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Send, Check, CheckCheck, Clock, CheckCircle, Handshake, X } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { CancelTransactionDialog } from '@/components/cancel-transaction-dialog'
@@ -34,6 +34,7 @@ type Message = {
     content: string;
     created_at: string;
     sender_id: string;
+    conversation_id: string;
     is_read?: boolean;
 }
 
@@ -53,6 +54,29 @@ type TransactionItem = {
             };
         };
     };
+}
+
+type SupabaseConversation = {
+    id: string;
+    last_message_at: string;
+    transaction_id: string | null;
+    participant1: Profile[];
+    participant2: Profile[];
+    transaction?: {
+        status: string;
+    }[] | null;
+}
+
+type RawTransactionItem = {
+    id: string;
+    agreed_price: number;
+    condition: string;
+    user_cards: {
+        default_cards: {
+            name: string;
+            image_uris: string | null;
+        }[];
+    }[];
 }
 
 type Transaction = {
@@ -116,7 +140,7 @@ export default function MessagesPage() {
     if (transaction.status === 'pending') {
       const userRole = getUserRole();
       if (userRole === 'seller') {
-        return 'Review the transaction details above and click "Accept Transaction" when ready.';
+        return 'Review the transaction details above and click &quot;Accept Transaction&quot; when ready.';
       }
       if (userRole === 'buyer') {
         return 'Waiting for the seller to accept the transaction. You can continue messaging.';
@@ -312,8 +336,8 @@ export default function MessagesPage() {
         return;
       }
       
-      const formattedConversations: Conversation[] = data.map((conv: any) => {
-          const otherParticipant = conv.participant1.id === user.id ? conv.participant2 : conv.participant1;
+      const formattedConversations: Conversation[] = data.map((conv: SupabaseConversation) => {
+          const otherParticipant = conv.participant1[0].id === user.id ? conv.participant2[0] : conv.participant1[0];
           return {
               id: conv.id,
               other_participant: otherParticipant,
@@ -321,7 +345,7 @@ export default function MessagesPage() {
               last_message_at: conv.last_message_at,
               unread_count: 0, // TODO: Implement unread count
               transaction_id: conv.transaction_id,
-              transaction_status: conv.transaction?.status || null,
+              transaction_status: conv.transaction?.[0]?.status || null,
           }
       }).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
 
@@ -337,7 +361,7 @@ export default function MessagesPage() {
   }, [router]);
 
   // Function to mark messages as read
-  const markMessagesAsRead = async (conversationId: string, markAll: boolean = true, messageIds?: string[]) => {
+  const markMessagesAsRead = useCallback(async (conversationId: string, markAll: boolean = true, messageIds?: string[]) => {
     try {
       const response = await fetch('/api/messages/mark-read', {
         method: 'POST',
@@ -377,7 +401,7 @@ export default function MessagesPage() {
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     const fetchMessagesAndItems = async () => {
@@ -448,7 +472,30 @@ export default function MessagesPage() {
                 console.error("Error fetching transaction items:", itemsError);
             } else {
                 console.log("Transaction items data:", itemsData);
-                setTransactionItems(itemsData);
+                // Transform the data structure to match TransactionItem type
+                const transformedItems: TransactionItem[] = itemsData.map((item: RawTransactionItem) => {
+                    let imageUris;
+                    try {
+                        const rawImageUris = item.user_cards[0].default_cards[0].image_uris;
+                        imageUris = typeof rawImageUris === 'string'
+                            ? JSON.parse(rawImageUris)
+                            : rawImageUris;
+                    } catch (e) {
+                        console.error('Error parsing image_uris:', e);
+                        imageUris = null;
+                    }
+
+                    return {
+                        ...item,
+                        user_cards: {
+                            default_cards: {
+                                ...item.user_cards[0].default_cards[0],
+                                image_uris: imageUris
+                            }
+                        }
+                    };
+                });
+                setTransactionItems(transformedItems);
             }
         } else {
             setTransaction(null);
@@ -458,7 +505,7 @@ export default function MessagesPage() {
 
     fetchMessagesAndItems();
 
-  }, [selectedConversation, userId]);
+  }, [selectedConversation, userId, markMessagesAsRead]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -544,7 +591,7 @@ export default function MessagesPage() {
       console.log('Unsubscribing from messages channel');
       supabase.removeChannel(channel);
     };
-  }, [selectedConversation, userId]);
+  }, [selectedConversation, userId, markMessagesAsRead]);
   
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -558,11 +605,12 @@ export default function MessagesPage() {
     const tempMessageId = Math.random().toString();
 
     // Optimistically update UI immediately with sending status
-    const optimisticMessage = {
+    const optimisticMessage: Message = {
       id: tempMessageId,
       content: messageContent,
       created_at: new Date().toISOString(),
-      sender_id: userId
+      sender_id: userId,
+      conversation_id: selectedConversation!.id
     };
     setMessages(prev => [...prev, optimisticMessage]);
     setMessageStatuses(prev => ({ ...prev, [tempMessageId]: 'sending' }));
@@ -664,7 +712,7 @@ export default function MessagesPage() {
                     case 'cancelled': return 'Transaction Cancelled';
                     case 'completed': return 'Transaction Completed';
                     case 'pending': return 'Pending';
-                    default: return status?.charAt(0).toUpperCase() + status?.slice(1);
+                    default: return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
                   }
                 };
 
@@ -797,7 +845,7 @@ export default function MessagesPage() {
                           {getUserRole() === 'seller' ? (
                             <div>
                               <p className="text-sm text-blue-600 font-medium">
-                                Review the transaction and click "Accept Transaction" when ready.
+                                Review the transaction and click &quot;Accept Transaction&quot; when ready.
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
                                 Accepting will lock the cart and allow you to coordinate the exchange.
@@ -822,7 +870,7 @@ export default function MessagesPage() {
                           </p>
                           {getUserRole() === 'buyer' && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              Once you receive the items, click "Mark as Complete" above to finish the transaction.
+                              Once you receive the items, click &quot;Mark as Complete&quot; above to finish the transaction.
                             </p>
                           )}
                         </div>
@@ -970,20 +1018,18 @@ export default function MessagesPage() {
       </div>
 
       {/* Cancel Transaction Dialog for Buyers */}
-      <CancelTransactionDialog
-        open={showCancelDialog}
-        onOpenChange={setShowCancelDialog}
-        onConfirm={cancelTransaction}
-        transactionId={transaction?.id || ''}
-        description="Are you sure you want to cancel this transaction? The seller will be notified."
-      />
+              <CancelTransactionDialog
+          open={showCancelDialog}
+          onOpenChange={setShowCancelDialog}
+          onConfirm={cancelTransaction}
+          description="Are you sure you want to cancel this transaction? The seller will be notified."
+        />
 
       {/* Cancel Transaction Dialog for Sellers */}
       <CancelTransactionDialog
         open={showSellerCancelDialog}
         onOpenChange={setShowSellerCancelDialog}
         onConfirm={cancelTransaction}
-        transactionId={transaction?.id || ''}
         description="Are you sure you want to cancel this transaction? The buyer will be notified."
       />
     </div>

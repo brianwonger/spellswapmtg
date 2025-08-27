@@ -1,0 +1,190 @@
+---
+description: Guidelines to prevent Vercel deployment errors from TypeScript/ESLint issues
+alwaysApply: true
+---
+
+# Vercel Deployment Prevention Rules
+
+## Overview
+This rule set prevents common TypeScript/ESLint errors that cause Vercel deployment failures. Based on recent deployment issues, these rules enforce strict code quality standards.
+
+## 🚨 Critical Build-Breaking Issues
+
+### 1. TypeScript `any` Type Usage
+**Problem**: Using `any` type bypasses TypeScript's type checking and can cause runtime errors.
+
+**✅ DO:**
+```typescript
+// Define proper interfaces for data structures
+interface SupabaseTransaction {
+  id: string;
+  status: string;
+  seller: {
+    id: string;
+    display_name: string | null;
+  };
+  transaction_items: SupabaseTransactionItem[];
+}
+
+// Use specific types instead of any
+const processTransaction = (tx: SupabaseTransaction) => {
+  // Properly typed code
+};
+```
+
+**❌ DON'T:**
+```typescript
+// This will cause build errors
+const processTransaction = (tx: any) => {
+  // Dangerous - no type safety
+};
+```
+
+### 2. Unused Variables and Imports
+**Problem**: ESLint flags unused variables/imports as errors in strict configurations.
+
+**✅ DO:**
+```typescript
+// Remove unused imports
+import { useEffect, useState } from 'react'; // Only import what's used
+
+// Prefix intentionally unused parameters with underscore
+export async function GET(_request: Request) {
+  // Parameter intentionally unused but required by API signature
+}
+
+// Remove unused variables
+const fetchData = async () => {
+  const { data } = await supabase.from('table').select('*');
+  // Don't assign error if not used
+};
+```
+
+**❌ DON'T:**
+```typescript
+// These will cause build errors
+import { useRef } from 'react'; // Never used
+
+const router = useRouter(); // Assigned but never used
+
+const { data, error } = await apiCall(); // error never used
+```
+
+### 3. React Hook Dependencies
+**Problem**: Missing dependencies in useEffect can cause stale closures and runtime bugs.
+
+**✅ DO:**
+```typescript
+// Include all dependencies used in useEffect
+useEffect(() => {
+  const fetchData = async () => {
+    const result = await apiCall();
+    setData(result);
+  };
+  fetchData();
+}, []); // Empty if no dependencies
+
+// Or include the function in dependencies
+const fetchData = useCallback(async () => {
+  // implementation
+}, []);
+
+useEffect(() => {
+  fetchData();
+}, [fetchData]);
+```
+
+**❌ DON'T:**
+```typescript
+// This will cause build errors
+useEffect(() => {
+  markMessagesAsRead(conversationId); // Function used but not in deps
+}, [conversationId]); // Missing markMessagesAsRead dependency
+```
+
+### 4. Unescaped JSX Entities
+**Problem**: Unescaped quotes in JSX cause React warnings and can break rendering.
+
+**✅ DO:**
+```typescript
+// Use HTML entities for quotes in JSX
+<p>Click &quot;Submit&quot; to continue.</p>
+<p>Review the transaction and click &quot;Accept&quot; when ready.</p>
+
+// Or use proper apostrophes
+<p>Don't forget to save your changes.</p>
+```
+
+**❌ DON'T:**
+```typescript
+// These will cause build errors
+<p>Click "Submit" to continue.</p>
+<p>Don't forget to save your changes.</p>
+```
+
+## 🔧 Quick Fixes for Common Issues
+
+### Fixing `any` Types
+1. **Create interfaces** for API responses
+2. **Use union types** for known value sets
+3. **Import types** from libraries when available
+4. **Use generic types** instead of `any`
+
+### Handling Unused Variables
+1. **Remove unused imports** completely
+2. **Prefix with underscore** for intentionally unused parameters
+3. **Remove unused variable assignments**
+4. **Use ESLint disable comments** only as last resort with justification
+
+### Managing Hook Dependencies
+1. **Add all used functions/variables** to dependency arrays
+2. **Use useCallback** for functions passed as dependencies
+3. **Consider useMemo** for expensive computations
+4. **Move functions inside useEffect** if they don't need to be dependencies
+
+## 🛠️ Development Workflow Integration
+
+### Pre-deployment Checklist
+- [ ] Run `npm run build` locally before pushing
+- [ ] Check for TypeScript errors with `npx tsc --noEmit`
+- [ ] Run ESLint with `npx eslint . --ext .ts,.tsx`
+- [ ] Test build in production mode
+
+### Automated Prevention
+- Enable strict TypeScript settings in `tsconfig.json`
+- Configure ESLint rules to catch these issues early
+- Set up pre-commit hooks to run linting
+- Use CI/CD to validate builds before deployment
+
+## 📋 Rule Priority Matrix
+
+| Issue Type | Severity | Build Impact | Fix Complexity |
+|------------|----------|--------------|----------------|
+| `any` types | High | ❌ Breaks build | Medium |
+| Unused vars | High | ❌ Breaks build | Low |
+| Missing deps | Medium | ⚠️ Runtime bugs | Medium |
+| Unescaped JSX | Medium | ⚠️ Rendering issues | Low |
+
+## 🔄 Continuous Improvement
+
+### Regular Audits
+- Review build logs after each deployment
+- Update rules based on new error patterns
+- Share common fixes with team members
+- Maintain examples of proper vs improper code
+
+### Tool Configuration
+- Keep TypeScript and ESLint configurations current
+- Regularly update dependency versions
+- Monitor for new linting rules that could help
+- Configure IDE extensions for real-time feedback
+
+## 📚 Related Rules
+
+- [Clean Code Guidelines](clean-code.mdc) - General code quality
+- [TypeScript Best Practices](nextjs.mdc) - TypeScript-specific guidance
+- [Code Quality Guidelines](codequality.mdc) - Overall quality standards
+
+---
+
+*This rule was created in response to Vercel deployment failures caused by TypeScript/ESLint errors. Regular updates based on new error patterns will help maintain deployment reliability.*

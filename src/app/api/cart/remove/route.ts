@@ -38,7 +38,7 @@ export async function DELETE(request: Request) {
     }
 
     // Check if transaction is accepted - don't allow removing items if it is
-    if (transactionItem.transactions.status === 'accepted') {
+    if (transactionItem.transactions[0].status === 'accepted') {
       return NextResponse.json({
         error: "Cannot remove items from cart. Transaction has already been accepted by the seller. Please coordinate with the seller to complete the transaction."
       }, { status: 400 });

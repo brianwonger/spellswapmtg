@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import dynamic from 'next/dynamic'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import 'leaflet/dist/leaflet.css'
+import type { Icon } from 'leaflet'
 
 // Dynamically import map components with no SSR
 const MapContainer = dynamic(
@@ -65,14 +67,13 @@ export function UserInfoCard({ profile }: { profile: Profile }) {
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [mapKey, setMapKey] = useState(0)
-  const [markerIcon, setMarkerIcon] = useState<any>(null)
+  const [markerIcon, setMarkerIcon] = useState<Icon | null>(null)
   const supabase = createClient()
 
   // Initialize Leaflet icon and CSS on client side
   useEffect(() => {
     const initLeaflet = async () => {
-      // Dynamically import Leaflet CSS and L object
-      await import('leaflet/dist/leaflet.css')
+      // Dynamically import Leaflet L object
       const L = await import('leaflet')
 
       setMarkerIcon(L.icon({

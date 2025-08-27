@@ -39,6 +39,30 @@ type TransactionWithItems = {
   transaction_items: CartItem[];
 }
 
+type SupabaseTransaction = {
+  id: string;
+  status: string;
+  seller: {
+    id: string;
+    display_name: string | null;
+  }[];
+  transaction_items: SupabaseTransactionItem[];
+}
+
+type SupabaseTransactionItem = {
+  id: string;
+  quantity: number;
+  agreed_price: number;
+  condition: string;
+  user_cards: {
+    id: string;
+    default_cards: {
+      name: string;
+      set_name: string;
+      image_uris: string | null;
+    }[];
+  }[];
+}
 
 const FALLBACK_CARD_IMAGE = "https://cards.scryfall.io/large/front/0/c/0c082aa8-bf7f-47f2-baf8-43ad253fd7d7.jpg"
 
@@ -98,20 +122,20 @@ export default function CartPage() {
         console.error('Error fetching transactions:', error)
         setError('Error loading your cart. Please try again later.')
       } else if (transactions) {
-        const grouped: Record<string, TransactionWithItems> = transactions.reduce((acc, tx: any) => {
-          const sellerId = tx.seller.id;
-          const sellerName = tx.seller.display_name;
+        const grouped: Record<string, TransactionWithItems> = transactions.reduce((acc: Record<string, TransactionWithItems>, tx: SupabaseTransaction) => {
+          const sellerId = tx.seller[0].id;
+          const sellerName = tx.seller[0].display_name;
           if (!acc[sellerId]) {
             acc[sellerId] = { id: tx.id, status: tx.status, seller_id: sellerId, seller_name: sellerName, transaction_items: [] };
           }
 
           // Parse image_uris for each transaction item
-          const processedItems = tx.transaction_items.map((item: any) => {
+          const processedItems = tx.transaction_items.map((item: SupabaseTransactionItem) => {
             let imageUris;
             try {
-              imageUris = typeof item.user_cards.default_cards.image_uris === 'string'
-                ? JSON.parse(item.user_cards.default_cards.image_uris)
-                : item.user_cards.default_cards.image_uris;
+              imageUris = typeof item.user_cards[0].default_cards[0].image_uris === 'string'
+                ? JSON.parse(item.user_cards[0].default_cards[0].image_uris)
+                : item.user_cards[0].default_cards[0].image_uris;
             } catch (e) {
               console.error('Error parsing image_uris:', e);
               imageUris = null;
@@ -120,9 +144,9 @@ export default function CartPage() {
             return {
               ...item,
               user_cards: {
-                ...item.user_cards,
+                ...item.user_cards[0],
                 default_cards: {
-                  ...item.user_cards.default_cards,
+                  ...item.user_cards[0].default_cards[0],
                   image_uris: imageUris
                 }
               }

@@ -13,10 +13,26 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Mail, ShoppingCart } from "lucide-react"
-import { useRouter } from "next/navigation"
+
 import { createClient } from "@/lib/supabase/client"
-import { useEffect, useState, useRef, useCallback } from "react"
-import { toast } from "sonner"
+import { useEffect, useState, useCallback } from "react"
+
+// Type definitions
+interface SupabaseClient {
+  storage: {
+    listBuckets(): Promise<{ data: Bucket[] | null; error: Error | null }>;
+    from(bucket: string): {
+      getPublicUrl(path: string): { data: { publicUrl: string } };
+    };
+  };
+}
+
+interface Bucket {
+  name: string;
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // Debug utility to test avatar URL
 const testAvatarUrl = (url: string) => {
@@ -28,7 +44,7 @@ const testAvatarUrl = (url: string) => {
 }
 
 // Debug utility to test avatars bucket
-const testAvatarsBucket = async (supabase: any) => {
+const testAvatarsBucket = async (supabase: SupabaseClient) => {
   try {
     const { data, error } = await supabase.storage.listBuckets()
     if (error) {
@@ -36,22 +52,27 @@ const testAvatarsBucket = async (supabase: any) => {
       return { status: 'error', error: error.message }
     }
 
-    const avatarsBucket = data.find((bucket: any) => bucket.name === 'avatars')
+    if (!data) {
+      console.log('Header: No bucket data received')
+      return { status: 'error', error: 'No bucket data received' }
+    }
+
+    const avatarsBucket = data.find((bucket: Bucket) => bucket.name === 'avatars')
     if (!avatarsBucket) {
       console.log('Header: Avatars bucket not found')
-      return { status: 'bucket-not-found', buckets: data.map((b: any) => b.name) }
+      return { status: 'bucket-not-found', buckets: data.map((b: Bucket) => b.name) }
     }
 
     console.log('Header: Avatars bucket found:', avatarsBucket)
     return { status: 'bucket-found', bucket: avatarsBucket }
   } catch (error) {
     console.log('Header: Error testing avatars bucket:', error)
-    return { status: 'error', error: error.message }
+    return { status: 'error', error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
 // Utility to fix avatar URL issues
-const fixAvatarUrl = async (supabase: any, userId: string, currentAvatarUrl: string | null) => {
+const fixAvatarUrl = async (supabase: SupabaseClient, userId: string, currentAvatarUrl: string | null) => {
   if (!currentAvatarUrl) {
     console.log('Header: No avatar URL to fix')
     return null
@@ -91,8 +112,6 @@ export function Header() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [cartCount, setCartCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
-  const router = useRouter()
-
 
   // Refresh cart count function
   const refreshCartCount = useCallback(async () => {
@@ -142,11 +161,11 @@ export function Header() {
       const supabase = createClient()
 
       // Test avatars bucket first (for debugging)
-      const bucketTest = await testAvatarsBucket(supabase)
+      await testAvatarsBucket(supabase)
 
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('profiles')
           .select('username, email, avatar_url')
           .eq('id', user.id)
