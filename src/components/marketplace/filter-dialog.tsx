@@ -17,20 +17,20 @@ const COLOR_MAP = {
 } as const
 
 const COLORS = ['White', 'Blue', 'Black', 'Red', 'Green', 'Colorless'] as const
-const FORMATS = ['Standard', 'Modern', 'Commander', 'Pioneer', 'Legacy', 'Vintage']
+// Removed formats constant as we're using distance filter instead
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic']
 const MANA_COSTS = ['0', '1', '2', '3', '4', '5', '6+']
 
 export interface MarketplaceFilters {
   colors: string[]
   manaCosts: string[]
-  format: string
   setName: string
   rarity: string[]
   priceRange: {
     min: string
     max: string
   }
+  distance?: number
 }
 
 interface FilterDialogProps {
@@ -40,13 +40,13 @@ interface FilterDialogProps {
 const initialFilterState = {
   colors: [] as string[],
   manaCosts: [] as string[],
-  format: "",
   setName: "",
   rarity: [] as string[],
   priceRange: {
     min: "",
     max: "",
   },
+  distance: 10,
 };
 
 export function FilterDialog({ onFiltersChange }: FilterDialogProps) {
@@ -71,12 +71,7 @@ export function FilterDialog({ onFiltersChange }: FilterDialogProps) {
     }))
   }
 
-  const handleFormatToggle = (format: string) => {
-    setFilters(prev => ({
-      ...prev,
-      format: prev.format === format ? '' : format
-    }))
-  }
+
 
   const handleRarityToggle = (rarity: string) => {
     setFilters(prev => ({
@@ -141,21 +136,6 @@ export function FilterDialog({ onFiltersChange }: FilterDialogProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Format</Label>
-            <div className="flex flex-wrap gap-2">
-              {FORMATS.map(format => (
-                <Button
-                  key={format}
-                  variant={filters.format === format ? "default" : "outline"}
-                  onClick={() => handleFormatToggle(format)}
-                  className="h-8"
-                >
-                  {format}
-                </Button>
-              ))}
-            </div>
-          </div>
 
           <div className="space-y-2">
             <Label>Set Name</Label>

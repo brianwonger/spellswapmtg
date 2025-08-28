@@ -28,7 +28,8 @@ export async function GET(request: Request) {
         max: searchParams.get('priceMax')
       },
       seller: searchParams.get('seller'),
-      search: searchParams.get('search')
+      search: searchParams.get('search'),
+      distance: searchParams.get('distance') ? parseInt(searchParams.get('distance')!) : 10
     }
 
     const supabase = await createClient()
@@ -230,8 +231,15 @@ export async function GET(request: Request) {
         })
     )
 
-    // Filter out null results
-    const validListings = listings.filter(listing => listing !== null)
+    // Filter out null results and apply distance filter
+    const validListings = listings
+      .filter(listing => listing !== null)
+      .filter(listing => {
+        // If no distance is set in filters or listing has no distance, include it
+        if (!filters.distance || listing?.distance === undefined) return true
+        // Otherwise, filter by distance
+        return listing.distance <= filters.distance
+      })
 
     return NextResponse.json(validListings)
   } catch (error) {

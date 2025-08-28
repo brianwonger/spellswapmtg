@@ -34,7 +34,7 @@ export default function MarketplacePage() {
     key: keyof MarketplaceListing | null
     direction: 'asc' | 'desc'
   }>({ key: null, direction: 'asc' })
-  const [wishlistFilter, setWishlistFilter] = useState<'all' | 'wishlist' | 'priority'>('all')
+  const [wishlistFilter, setWishlistFilter] = useState<'all' | 'wishlist' | 'priority'>('wishlist')
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
   const [removingFromCart, setRemovingFromCart] = useState<string | null>(null);
@@ -202,8 +202,8 @@ export default function MarketplacePage() {
       if (currentFilters.manaCosts?.length) {
         params.set('manaCosts', currentFilters.manaCosts.join(','))
       }
-      if (currentFilters.format) {
-        params.set('format', currentFilters.format)
+      if (currentFilters.distance) {
+        params.set('distance', currentFilters.distance.toString())
       }
       if (currentFilters.setName) {
         params.set('setName', currentFilters.setName)
@@ -405,17 +405,16 @@ export default function MarketplacePage() {
         </div>
         <div className="flex gap-2">
           <Select
-            value={filters.format || 'all'}
-            onValueChange={handleCategoryChange}
+            value={filters.distance?.toString() || '10'}
+            onValueChange={(value) => setFilters(prev => ({ ...prev, distance: parseInt(value) }))}
           >
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Category" />
+              <SelectValue placeholder="Distance" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="standard">Standard</SelectItem>
-              <SelectItem value="modern">Modern</SelectItem>
-              <SelectItem value="commander">Commander</SelectItem>
+              <SelectItem value="3">Less than 3km</SelectItem>
+              <SelectItem value="10">Less than 10km</SelectItem>
+              <SelectItem value="100">Less than 100km</SelectItem>
             </SelectContent>
           </Select>
           <FilterDialog onFiltersChange={handleFiltersChange} />
